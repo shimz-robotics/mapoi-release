@@ -1,142 +1,122 @@
-# mapoi
+# mapoi_rviz_plugins
 
 > English version (primary): [README.md](./README.md)
 > 本ファイルは日本語スナップショットです。最新の内容は英語版を参照してください。
 
-[![CI](https://github.com/shimz-robotics/mapoi/actions/workflows/ros-test.yml/badge.svg)](https://github.com/shimz-robotics/mapoi/actions/workflows/ros-test.yml)
-[![GitHub release](https://img.shields.io/github/v/release/shimz-robotics/mapoi)](https://github.com/shimz-robotics/mapoi/releases)
-[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](./LICENSE)
-[![ROS 2](https://img.shields.io/badge/ROS%202-Humble%20%7C%20Jazzy-blue)](https://docs.ros.org/)
+mapoi 用の RViz2 プラグインパッケージです。GUI から地図切替・POI 選択・自律走行の操作、および POI の編集ができます。
 
-Navigation2 向けの地図（Map）と関心地点（POI: Point of Interest）を管理するメタパッケージです。
-地図の切り替え、POI の管理、RViz2 GUI からの自律走行操作、POI 半径イベントの検知を提供します。
+## プラグイン
 
-<p align="center">
-  <img src="docs/images/webui.png" alt="mapoi Web UI のデスクトップ表示: 地図・POI・ルートとナビゲーション操作パネル" width="600">
-  <img src="docs/images/webui-mobile.png" alt="mapoi Web UI のスマートフォン表示" width="240">
-</p>
+### MapoiPanel（パネルプラグイン）
 
-*`turtlebot3_world` デモ実行中の Web UI（デスクトップ表示とスマートフォン表示）。*
+RViz2 のパネルとして追加できるナビゲーション操作パネルです。
 
-## 主な機能
+- 地図の切替をドロップダウンから選択
+- 地図に応じた目的地（`waypoint` タグ付きの POI。`landmark` タグ併用の POI は除外）をリストから選択
+- ルートをリストから選択して走行開始
+- 選択した POI の位置に自己位置を修正（Initial Pose の設定）
+- 選択した POI への自律走行を開始
+- 自律走行の一時停止・再開・停止
+- ナビゲーション状態の表示（`navigating`, `succeeded`, `aborted`, `canceled`, `paused`, `map_switching`, `map_switch_succeeded`, `map_switch_failed`, `backend_unavailable`, `rejected`。各値の意味は [`mapoi_server` README](../mapoi_server/README.ja.md) の `mapoi/nav/status` 項を参照）
+- 選択中の POI/ルートを RViz2 上でハイライト表示
 
-- **地図管理**: 複数地図の切り替え、Nav2 との連携
-- **POI 管理**: YAML ベースの POI 定義、サービス経由での取得
-- **自律走行**: POI 名指定でのゴール走行、ルート走行、一時停止・再開
-- **POI 半径イベント**: POI の半径にロボットが侵入/退出した際のイベント発行
-- **タグシステム**: システムタグ（`waypoint`, `landmark`, `pause`）とユーザー定義タグによる POI 分類
-- **RViz2 GUI**: 地図切替・ゴール指定・ルート走行の操作パネル、POI エディタ、ポーズ指定ツール
-- **Web UI**: ブラウザからの地図表示・POI 編集・ナビゲーション操作・ロボット位置表示（スマートフォン対応）
-- **マーカー表示**: RViz2 上での POI 可視化、ハイライト表示、半径表示
+#### パブリッシャー
 
-## アーキテクチャ
+| トピック名 | 型 | 説明 |
+| --- | --- | --- |
+| `mapoi/nav/goal_pose_poi` | `std_msgs/String` | ゴール POI 名の配信。実際の Nav2 action 起動は navigation bridge (`mapoi_nav2_bridge` ほか) が担当 |
+| `mapoi/nav/pause` | `std_msgs/String` | ナビゲーションの一時停止 |
+| `mapoi/nav/resume` | `std_msgs/String` | ナビゲーションの再開 |
+| `mapoi/nav/cancel` | `std_msgs/String` | ナビゲーションのキャンセル |
+| `mapoi/nav/route` | `std_msgs/String` | ルート走行の開始 |
+| `mapoi/nav/switch_map` | `std_msgs/String` | 選択した地図への切替要求。実際の地図切替は navigation bridge が担当 |
+| `mapoi/highlight/goal` | `std_msgs/String` | ゴールマーカーのハイライト |
+| `mapoi/highlight/route` | `std_msgs/String` | ルートマーカーのハイライト |
 
-```mermaid
-flowchart LR
-    UI["Web UI / RViz2 panels"]
-    BRIDGE["mapoi_nav2_bridge"]
-    SERVER["mapoi_server"]
-    NAV2["Nav2"]
-    CFG["mapoi_config.yaml (per map)"]
-    UI -- "mapoi/nav/* command topics (goal_pose_poi, route, pause, resume, cancel, switch_map)" --> BRIDGE
-    BRIDGE -- "navigate_to_pose / follow_waypoints actions" --> NAV2
-    BRIDGE -- "mapoi/nav/status, mapoi/events" --> UI
-    UI -- "mapoi/get_pois_info etc. (services)" --> SERVER
-    BRIDGE -- "mapoi/select_map, mapoi/get_route_pois (services)" --> SERVER
-    SERVER <--> CFG
-```
+#### サービスクライアント
 
-上図は簡略版です (localization・RViz マーカー・status/event の詳細は省略)。ノード・topic・service の全体像は [docs/architecture.ja.md](./docs/architecture.ja.md) を参照してください。
+| サービス名 | 型 | 説明 |
+| --- | --- | --- |
+| `mapoi/get_maps_info` | `GetMapsInfo` | 地図ドロップダウン用の現在地図名・地図リストの取得 |
+| `mapoi/get_pois_info` | `GetPoisInfo` | 目的地ドロップダウン用の POI リストの取得 |
+| `mapoi/get_routes_info` | `GetRoutesInfo` | ルートドロップダウン用のルートリストの取得 |
+| `mapoi/get_route_pois` | `GetRoutePois` | ハイライト表示用に選択ルートの POI を取得 |
+| `mapoi/request_initial_pose` | `RequestInitialPose` | Initial Pose 設定時に `mapoi_server` へ publish を依頼 (#211)。panel は直接 `mapoi/initialpose_poi` を publish しない |
 
-## Docker quickstart
+#### サブスクライバー
 
-最速で試したい場合は ghcr.io 配布 image を `docker run`:
+| トピック名 | 型 | 説明 |
+| --- | --- | --- |
+| `mapoi/config_path` | `std_msgs/String` | 設定ファイルパスの変更検知 |
+| `mapoi/nav/status` | `std_msgs/String` | ナビゲーション状態の表示（`"status"` / `"status:target"` 形式、transient_local QoS）。target が含まれていれば後起動 panel でも "Navigating: target" / "Arrived: target" 等を復元可能 |
+| `mapoi/nav/backend_status` | `mapoi_interfaces/NavigationBackendStatus` | navigation backend の readiness と liveliness に応じて走行操作 UI（Run Goal / Run Route / Pause / Resume / Stop ボタンと地図ドロップダウン）を enable/disable (#198, #209)。QoS は msg contract (#208) に従う。[docs/backend-status.ja.md](../docs/backend-status.ja.md) 参照 |
+| `mapoi/localization/backend_status` | `mapoi_interfaces/LocalizationBackendStatus` | localization backend の readiness と liveliness に応じて Initial Pose ボタンを enable/disable (#209) |
 
-```sh
-xhost +local:docker
-docker pull ghcr.io/shimz-robotics/mapoi:jazzy   # jazzy/latest は main 追従のローリングタグ。再訪時も pull で最新化
-docker run --rm -it --network host --ipc host \
-  -e DISPLAY=$DISPLAY \
-  -e QT_X11_NO_MITSHM=1 \
-  -v /tmp/.X11-unix:/tmp/.X11-unix \
-  ghcr.io/shimz-robotics/mapoi:jazzy
-```
+### PoiEditor（パネルプラグイン）
 
-ブラウザで http://localhost:8765 にアクセス。Nav2 lifecycle 立ち上げに 30〜60 秒かかるので少し待ってから。WebUI が「Navigation unavailable」のままになる場合は [docs/docker.ja.md](./docs/docker.ja.md) のトラブルシューティングを参照してください。
+POI の情報を表形式で表示・編集・保存できるパネルです。
 
-Humble 版 / GPU 加速 / ソースビルド / 開発用 bind mount / UID 調整等の詳細は [docs/docker.ja.md](./docs/docker.ja.md) を参照してください。
+- 現在の設定ファイルから POI 情報を読み込み
+- 編集対象の地図をドロップダウンから切替（`mapoi/select_map` で `mapoi_server` の編集 context を切替。稼働中ロボットの地図は切替えない）
+- 表形式での POI 情報の確認・編集（name, pose, tolerance, tags, description の 5 column 構成、#158）
+  - **pose** column は `x, y, yaw` 形式（例: `1.00, 2.00, 0.79`、x/y は m、yaw は rad、表示は小数点以下 2 桁）
+  - **tolerance** column は `xy, yaw` 形式の 1 column 統合表記（例: `0.50, 0.79`、xy は m、yaw は rad、表示は小数点以下 2 桁）
+    - validation 制約: `xy >= 0.001 m` / `0.001 rad <= yaw <= 2π rad`
+    - max `2π rad` (= 360°) は、deg → rad 単位変更 (#158) 後の旧 deg 入力 (例: `45`)
+      を誤って rad として入れたケースを弾くガード
+  - **description** は末尾 column（長文 OK、横幅圧迫を回避）
+- POI の追加・コピー・削除
+- 編集の undo/redo（行の追加・コピー・削除、セル編集、行並べ替え）を Undo/Redo ボタンまたは `Ctrl+Z` / `Ctrl+Shift+Z` で実行可能 (#407, #435)
+  - ボタンは focus の有無に関わらず動作する。キーボードショートカットはパネル内に focus がある時のみ有効（先に表のセルをクリックして focus を入れる）
+  - 履歴は保存成功時・タグフィルタ変更時・表の全再構築時（地図切替や保存後の自動リロードなど）にクリアされる
+- タグによるフィルタリング表示
+- TagHelperComboBox によるタグ入力補助（システムタグは `[S]` 表記）
+- バリデーション付き保存（名前重複・座標形式・tolerance.xy チェック、未定義タグの警告）
+- MapoiPoseTool と連携した位置入力
+- 保存後に mapoi_server の設定を自動リロード
 
-## 動作要件
+#### サービスクライアント
 
-- ROS 2 Humble (Ubuntu 22.04) または Jazzy (Ubuntu 24.04)
-- Nav2 ほか依存パッケージは `rosdep` で解決します（後述のビルド手順を参照）
+| サービス名 | 型 | 説明 |
+| --- | --- | --- |
+| `mapoi/select_map` | `SelectMap` | `mapoi_server` の編集 context を選択した地図へ切替（稼働中ロボットの Nav2 地図は切替えない） |
+| `mapoi/get_maps_info` | `GetMapsInfo` | 現在地図名・地図リストの取得 |
+| `mapoi/get_pois_info` | `GetPoisInfo` | 表に表示する POI リストの取得 |
+| `mapoi/get_tag_definitions` | `GetTagDefinitions` | TagHelperComboBox と保存時 validation 用の system/user タグ定義の取得 |
+| `mapoi/reload_map_info` | `std_srvs/Trigger` | 保存後に `mapoi_server` へ設定のリロードを依頼 |
 
-## ビルドとサンプルの実行
+#### サブスクライバー
 
-```sh
-source /opt/ros/<distro>/setup.bash   # humble または jazzy
-# cd path/to/your_ws
-git clone https://github.com/shimz-robotics/mapoi.git src/mapoi
-rosdep update
-rosdep install --from-paths src --ignore-src -r -y
-colcon build --symlink-install
-source install/setup.bash
-export TURTLEBOT3_MODEL=burger
-ros2 launch mapoi_turtlebot3_example turtlebot3_navigation.launch.yaml
-```
+| トピック名 | 型 | 説明 |
+| --- | --- | --- |
+| `mapoi_rviz_pose` | `geometry_msgs/PoseStamped` | MapoiPoseTool からの位置入力 |
+| `mapoi/config_path` | `std_msgs/String` | 設定ファイルパスの変更検知 |
 
-ブラウザから Web UI にアクセス:
+### MapoiPoseTool（ツールプラグイン）
 
-http://localhost:8765
+RViz2 のツールバーに追加できるポーズ指定ツールです。ショートカットキー: `i`
 
-スマートフォンからも同一ネットワーク内であればアクセスできます。その場合、localhostの部分を実行しているPCのIPアドレスに変更してください。
-地図表示・POI 編集・ナビゲーション操作・ロボット位置表示が可能です。
+- RViz2 上でクリック＆ドラッグして位置・姿勢を指定
+- PoiEditor の選択行に位置を反映
+- 使用後は自動的にデフォルトツールに戻る
+- POI の位置は `map` frame で保存されるため、RViz2 の Fixed Frame が `map` であることが前提です。
+  異なる frame の場合は反映せず、警告ダイアログを表示します。
 
-コマンドで目的地を指定したい場合には、別ターミナルから自律走行をテストできます。
+#### パブリッシャー
 
-```sh
-ros2 topic pub -1 /mapoi/nav/goal_pose_poi std_msgs/msg/String "{data: goal}"
-```
+| トピック名 | 型 | 説明 |
+| --- | --- | --- |
+| `mapoi_rviz_pose` | `geometry_msgs/PoseStamped` | 指定した位置・姿勢の配信 |
 
-## 自分のロボットへの導入
+## RViz2 への追加方法
 
-mapoi は Nav2 ベースのロボットであれば実機・シミュレーションを問わず利用できます。導入手順は [docs/integration.ja.md](./docs/integration.ja.md) を参照してください。
+1. RViz2 を起動
+2. Panels > Add New Panel から `MapoiPanel` または `PoiEditor` を追加
+3. ツールバーの「+」ボタンから `MapoiPoseTool` を追加
 
-## パッケージ構成
+## 依存パッケージ
 
-| パッケージ | 説明 |
-| --- | --- |
-| [mapoi_server](./mapoi_server/) | 地図・POI 情報の管理サーバー、ナビゲーションサーバー、RViz2 マーカー配信（メインパッケージ） |
-| [mapoi_interfaces](./mapoi_interfaces/) | メッセージ・サービスの定義 |
-| [mapoi_rviz_plugins](./mapoi_rviz_plugins/) | RViz2 プラグイン（地図切替・POI 選択・自律走行の GUI、POI エディタ） |
-| [mapoi_webui](./mapoi_webui/) | Web UI（ブラウザからの地図表示・POI 編集・ナビゲーション操作・ロボット位置表示） |
-| [mapoi_turtlebot3_example](./mapoi_turtlebot3_example/) | TurtleBot3 シミュレーション環境でのサンプル |
-| [mapoi](./mapoi/) | コアパッケージ一式を 1 つの単位でインストールするための metapackage 定義 (シミュレーション用の mapoi_turtlebot3_example は含まない。デモを試す場合は example を直接インストールするとコア一式も入る) |
-
-## ドキュメント
-
-| 用途 | リンク |
-| --- | --- |
-| 自分のロボットへの導入手順 | [docs/integration.ja.md](./docs/integration.ja.md) |
-| Docker での demo / 開発環境 | [docs/docker.ja.md](./docs/docker.ja.md) |
-| アーキテクチャ概要 (ノード・topic・service・データフロー) | [docs/architecture.ja.md](./docs/architecture.ja.md) |
-| Navigation / Localization backend 仕様 (自前 bridge 実装者向け) | [docs/backend-status.ja.md](./docs/backend-status.ja.md) |
-| コントリビューションガイド (開発環境・PR フロー) | [CONTRIBUTING.md](./CONTRIBUTING.md) |
-| テスト追加ポリシー (致命核基準・launch_test/e2e 追加の判断) | [docs/testing-policy.md](./docs/testing-policy.md) |
-| 破壊的変更リリースの migration ガイド | [docs/migration/README.ja.md](./docs/migration/README.ja.md) |
-| 各リリースの破壊的変更詳細 | [`CHANGELOG.rst`](./CHANGELOG.rst) |
-
-## バージョン方針 (SemVer)
-
-本プロジェクトは現在 **v0.x の開発フェーズ** にあります。
-
-- **v0.x 系**: API は安定していません。設計の見直しによる **破壊的変更が任意のリリースで発生する可能性** があります。各リリースの破壊的変更は [`CHANGELOG.rst`](./CHANGELOG.rst) と [GitHub Releases](https://github.com/shimz-robotics/mapoi/releases) で明示し、段階的な移行手順は [docs/migration/README.ja.md](./docs/migration/README.ja.md) にまとめます
-- **v1.0.0 以降**: 公開 API (msg / topic / service / launch param / YAML schema 等) の後方互換性を保証します。破壊的変更は major バージョン bump (v2.0.0 等) で明示します
-
-### 計画中の破壊的変更
-
-計画中の破壊的変更を含む今後の予定は [GitHub Milestones](https://github.com/shimz-robotics/mapoi/milestones) を参照してください。
-
-## ライセンス
-
-MIT
+- `rviz_common`
+- `rviz_default_plugins`
+- `std_srvs`
+- `mapoi_interfaces`
