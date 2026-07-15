@@ -1,3 +1,0 @@
-# Retrieve the list of available route names for the current map
----
-string[] routes_list  # Names of all routes defined in the current map
