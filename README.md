@@ -1,141 +1,190 @@
-# mapoi
+# mapoi_interfaces
 
 > Japanese version: [README.ja.md](./README.ja.md)
 
-[![CI](https://github.com/shimz-robotics/mapoi/actions/workflows/ros-test.yml/badge.svg)](https://github.com/shimz-robotics/mapoi/actions/workflows/ros-test.yml)
-[![GitHub release](https://img.shields.io/github/v/release/shimz-robotics/mapoi)](https://github.com/shimz-robotics/mapoi/releases)
-[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](./LICENSE)
-[![ROS 2](https://img.shields.io/badge/ROS%202-Humble%20%7C%20Jazzy-blue)](https://docs.ros.org/)
+Package defining the messages and services used across the mapoi packages.
 
-A metapackage for managing maps and POIs (Points of Interest) for Navigation2.
-It provides map switching, POI management, autonomous navigation operation from the RViz2 GUI, and POI radius event detection.
+## Messages (msg)
 
-<p align="center">
-  <img src="docs/images/webui.png" alt="mapoi Web UI on desktop: map view with POIs, routes, and navigation controls" width="600">
-  <img src="docs/images/webui-mobile.png" alt="mapoi Web UI on a smartphone" width="240">
-</p>
+### Tolerance.msg
 
-*Web UI running the `turtlebot3_world` demo (desktop and smartphone views).*
+Tolerance for POI arrival detection (aligned with Nav2 `SimpleGoalChecker`'s `xy_goal_tolerance` / `yaw_goal_tolerance`).
 
-## Key features
+| Field | Type | Description |
+| --- | --- | --- |
+| `xy` | `float64` | Euclidean tolerance (m). Also used as the POI entry-detection radius |
+| `yaw` | `float64` | Angular tolerance (rad). `0` means unspecified and falls back to the Nav2 default |
 
-- **Map management**: switching between multiple maps, integration with Nav2
-- **POI management**: YAML-based POI definitions, retrieval via services
-- **Autonomous navigation**: goal navigation by POI name, route navigation, pause/resume
-- **POI radius events**: events fired when the robot enters/exits a POI's radius
-- **Tag system**: POI classification via system tags (`waypoint`, `landmark`, `pause`) and user-defined tags
-- **RViz2 GUI**: an operation panel for map switching, goal selection, and route navigation, a POI editor, and a pose-specification tool
-- **Web UI**: map display, POI editing, navigation operation, and robot position display from a browser (smartphone-friendly)
-- **Marker display**: POI visualization, highlighting, and radius display in RViz2
+### PointOfInterest.msg
 
-## Architecture
+Message representing a POI (Point of Interest).
 
-```mermaid
-flowchart LR
-    UI["Web UI / RViz2 panels"]
-    BRIDGE["mapoi_nav2_bridge"]
-    SERVER["mapoi_server"]
-    NAV2["Nav2"]
-    CFG["mapoi_config.yaml (per map)"]
-    UI -- "mapoi/nav/* command topics (goal_pose_poi, route, pause, resume, cancel, switch_map)" --> BRIDGE
-    BRIDGE -- "navigate_to_pose / follow_waypoints actions" --> NAV2
-    BRIDGE -- "mapoi/nav/status, mapoi/events" --> UI
-    UI -- "mapoi/get_pois_info etc. (services)" --> SERVER
-    BRIDGE -- "mapoi/select_map, mapoi/get_route_pois (services)" --> SERVER
-    SERVER <--> CFG
+| Field | Type | Description |
+| --- | --- | --- |
+| `name` | `string` | POI name. Serves as the effective unique key |
+| `pose` | `geometry_msgs/Pose` | Position and orientation of the POI |
+| `tolerance` | `mapoi_interfaces/Tolerance` | xy / yaw tolerance (replaced the old `radius` field in v0.3.0) |
+| `tags` | `string[]` | Tags associated with the POI (e.g. system tags `waypoint` / `landmark` / `pause`, or a user-defined tag such as `audio_info`) |
+| `description` | `string` | Description of the POI |
+
+### PoiEvent.msg
+
+Event message published when a robot enters/exits a route-registered POI during route navigation, or when navigation stops at a `pause`-tagged POI (#220 simplified this from 4 event types to 3).
+
+| Field | Type | Description |
+| --- | --- | --- |
+| `EVENT_ENTER` | `uint8` (constant=1) | The robot entered a route-registered POI's `tolerance.xy` radius during route navigation (only when `nav_mode == ROUTE` and the POI is in `current_route_poi_names_`; not published outside route navigation, i.e. in IDLE / GOAL mode) |
+| `EVENT_PAUSED` | `uint8` (constant=2) | Navigation stopped (detected via cmd_vel dwell) within the `tolerance.xy` of a `pause`-tagged POI. Fires the moment Nav2 enters the stopped state after the pause auto-trigger |
+| `EVENT_EXIT` | `uint8` (constant=3) | The robot exited a route-registered POI beyond `tolerance.xy * hysteresis_exit_multiplier` |
+| `event_type` | `uint8` | Event type (one of the 3 above) |
+| `poi` | `mapoi_interfaces/PointOfInterest` | Information about the target POI |
+| `stamp` | `builtin_interfaces/Time` | Timestamp of the event |
+
+Lifecycle:
+```
+EVENT_ENTER -> [EVENT_PAUSED (only if pause-tagged + nav stops)] -> EVENT_EXIT
 ```
 
-The diagram above is simplified (localization, RViz markers, and status/event details are omitted) — see [docs/architecture.md](./docs/architecture.md) for the full node/topic/service breakdown.
+Prerequisites for `EVENT_PAUSED`:
+- The controller in use must **keep publishing cmd_vel = 0 while navigation is stopped** (the Nav2 default behavior). If the controller stops publishing cmd_vel while stationary, `EVENT_PAUSED` will not fire.
+- The pause auto-trigger (and the `EVENT_PAUSED` publish) is performed on the `mapoi_nav2_bridge` side, and resume is triggered by a client-side `mapoi/nav/resume` request, so there is no `RESUMED`-equivalent event in this spec (resume can be observed via the status topic).
 
-## Docker quickstart
+### TagDefinition.msg
 
-For the fastest way to try it out, `docker run` the image distributed via ghcr.io:
+Message representing a single POI classification tag definition (system tag / user tag). Introduced in PR #193 so it can also be used as a response component of `GetTagDefinitions.srv`.
 
-```sh
-xhost +local:docker
-docker pull ghcr.io/shimz-robotics/mapoi:jazzy   # jazzy/latest is a rolling tag that tracks main; pull again on each revisit to get the latest
-docker run --rm -it --network host --ipc host \
-  -e DISPLAY=$DISPLAY \
-  -e QT_X11_NO_MITSHM=1 \
-  -v /tmp/.X11-unix:/tmp/.X11-unix \
-  ghcr.io/shimz-robotics/mapoi:jazzy
-```
+| Field | Type | Description |
+| --- | --- | --- |
+| `name` | `string` | Tag name (e.g. system tags `waypoint` / `landmark` / `pause`, or a user-defined tag such as `audio_info`) |
+| `description` | `string` | Human-readable description of the tag's purpose |
+| `is_system` | `bool` | `true` = system tag, `false` = user-defined tag |
 
-Access http://localhost:8765 in your browser. Bringing up the Nav2 lifecycle takes about 30-60 seconds, so give it a moment. If the WebUI stays stuck on "Navigation unavailable", see the troubleshooting section in [docs/docker.md](./docs/docker.md).
+### InitialPoseRequest.msg
 
-See [docs/docker.md](./docs/docker.md) for details on the Humble variant, GPU acceleration, building from source, development bind mounts, UID adjustment, and more.
+Notification message for the "candidate initial-pose POI" accompanying an operator's map switch / reload (typed in #149 round 8, previously a pair of strings). Published by `mapoi_server`, the topic's sole writer, on request via the `mapoi/request_initial_pose` service (#211) — e.g. `mapoi_nav2_bridge` requests it after a successful Nav2 `LoadMap` — as well as on its own at startup (default POI adoption) and on reload (stale clear), and subscribed to by the localization bridges. See the header comment in `msg/InitialPoseRequest.msg` for details and the stale-rejection strategy.
 
-## Requirements
+| Field | Type | Description |
+| --- | --- | --- |
+| `map_name` | `string` | Name of the map this notification targets (for generation identification). If non-empty, it must match the current map at publish time (#299). Empty is only possible when a requester with an unknown map passes an empty value to the service |
+| `poi_name` | `string` | Name of the POI to adopt (empty string = "no candidate", ignored by subscribers) |
 
-- ROS 2 Humble (Ubuntu 22.04) or Jazzy (Ubuntu 24.04)
-- Nav2 and the other dependencies are resolved via `rosdep` (see the build steps below)
+QoS is `transient_local` (depth=1), so late-joining subscribers can also receive the latched value.
 
-## Building and running the sample
+### NavigationBackendStatus.msg
 
-```sh
-source /opt/ros/<distro>/setup.bash   # humble or jazzy
-# cd path/to/your_ws
-git clone https://github.com/shimz-robotics/mapoi.git src/mapoi
-rosdep update
-rosdep install --from-paths src --ignore-src -r -y
-colcon build --symlink-install
-source install/setup.bash
-export TURTLEBOT3_MODEL=burger
-ros2 launch mapoi_turtlebot3_example turtlebot3_navigation.launch.yaml
-```
+Readiness message published at 1 Hz to `mapoi/nav/backend_status` by the navigation bridge (Nav2 bridge / custom bridge). The UI side (`mapoi_webui`, `mapoi_rviz_plugins`) gates navigation operations based on `backend_ready`.
 
-Access the Web UI from a browser:
+| Field | Type | Description |
+| --- | --- | --- |
+| `backend_type` | `string` | Bridge identifier (e.g. `nav2`, `custom_lidar_planner`). For tooltip display |
+| `backend_ready` | `bool` | Whether the bridge can accept and execute navigation commands |
+| `reason` | `string` | Human-readable reason when `backend_ready=false` (optional, must not contain sensitive information — see below) |
 
-http://localhost:8765
+#### QoS contract (issue #208)
 
-You can also access it from a smartphone on the same network. In that case, replace `localhost` with the IP address of the PC running the demo.
-It lets you view the map, edit POIs, operate navigation, and see the robot's position.
+Both the publisher and subscriber must always specify the following:
 
-If you'd rather send a goal from the command line, you can test autonomous navigation from a separate terminal.
+- `durability`: `TRANSIENT_LOCAL` (so a late-joining UI can receive the latest status)
+- `reliability`: `RELIABLE`
+- `liveliness` (publisher): `MANUAL_BY_TOPIC` (asserts liveliness on every `publish()`)
+- `liveliness` (subscriber): `AUTOMATIC` (only `MANUAL_BY_TOPIC` publisher × `AUTOMATIC` subscriber is compatible)
+- `liveliness_lease_duration`: 5 s (both sides; must satisfy `pub.lease <= sub.lease`)
 
-```sh
-ros2 topic pub -1 /mapoi/nav/goal_pose_poi std_msgs/msg/String "{data: goal}"
-```
+See the header comment in `msg/NavigationBackendStatus.msg` for details and violation patterns.
 
-## Integrating with your own robot
+#### Guidance for custom bridge implementers (issue #207)
 
-mapoi works with any Nav2-based robot, real or simulated. See [docs/integration.md](./docs/integration.md) for step-by-step integration instructions.
+Each bridge should compute `backend_ready` as the AND of the capabilities it *actually* exposes. `mapoi_nav2_bridge`'s (Nav2 bridge) `goal_ready && route_ready && switch_map_ready` is **only correct for a bridge that exposes all 3 capabilities**. If a bridge that only exposes a single capability (e.g. NavigateToPose only) mimics this, the capability it doesn't expose is always false → `backend_ready` is also always false → the UI always shows "Navigation unavailable".
 
-## Package composition
+See the header comment in `msg/NavigationBackendStatus.msg` for concrete examples and the field-population conventions (including the `reason` phrasing convention).
 
-| Package | Description |
-| --- | --- |
-| [mapoi_server](./mapoi_server/) | Server that manages map/POI information, navigation server, RViz2 marker publisher (main package) |
-| [mapoi_interfaces](./mapoi_interfaces/) | Message and service definitions |
-| [mapoi_rviz_plugins](./mapoi_rviz_plugins/) | RViz2 plugins (GUI for map switching, POI selection, and autonomous navigation, plus a POI editor) |
-| [mapoi_webui](./mapoi_webui/) | Web UI (map display, POI editing, navigation operation, and robot position display from a browser) |
-| [mapoi_turtlebot3_example](./mapoi_turtlebot3_example/) | Sample for the TurtleBot3 simulation environment |
-| [mapoi](./mapoi/) | Metapackage definition that installs the core packages as a single unit (does not include mapoi_turtlebot3_example, which is for simulation; installing the example package directly also pulls in the full core set if you just want to try the demo) |
+`reason` is shown in the operator UI and can be recorded in bags or remote dashboards, so it must not contain sensitive information such as credentials, tokens, absolute paths, internal hostnames, IP addresses, user identifiers, or stack traces. Keep it to a capability name plus a short state verb (e.g. `not ready: navigate_to_pose action`).
 
-## Documentation
+> **Scope of the CI lint** (`scripts/check_docs_consistency.py`, PR #217 / Closes #216): the static check only scans **explicit string literals** in `publish_backend_status`-family functions. Dynamically-assembled strings (e.g. `reason = "ip=" + this->get_parameter(...).as_string()`) and raw string literals (`R"(...)"`) are out of scope. Passing the lint does *not* guarantee complete redaction. Bridge implementers must apply this section's prohibitions to dynamic parts as well.
 
-| Purpose | Link |
-| --- | --- |
-| Integration steps for your own robot | [docs/integration.md](./docs/integration.md) |
-| Docker demo / development environment | [docs/docker.md](./docs/docker.md) |
-| Architecture overview (nodes, topics, services, data flow) | [docs/architecture.md](./docs/architecture.md) |
-| Navigation / Localization backend spec (for custom bridge implementers) | [docs/backend-status.md](./docs/backend-status.md) |
-| Contributing guide (development setup, PR flow) | [CONTRIBUTING.md](./CONTRIBUTING.md) |
-| Test addition policy (criteria for critical-core coverage, decisions on adding launch_test/e2e tests) (Japanese) | [docs/testing-policy.md](./docs/testing-policy.md) |
-| Migration guides for breaking-change releases | [docs/migration/](./docs/migration/) |
-| Breaking-change details for each release | [`CHANGELOG.rst`](./CHANGELOG.rst) |
+### LocalizationBackendStatus.msg
 
-## Versioning policy (SemVer)
+Readiness message published at 1 Hz to `mapoi/localization/backend_status` by the localization bridge (`mapoi_amcl_localization_bridge` / a custom bridge) (#209). The UI side gates Initial Pose operations based on `backend_ready`. This is an independent axis from the Navigation backend (`NavigationBackendStatus` above) and each is treated as a separate indicator.
 
-This project is currently in the **v0.x development phase**.
+| Field | Type | Description |
+| --- | --- | --- |
+| `backend_type` | `string` | Bridge identifier (e.g. `amcl`, `slam_toolbox`, `custom_lidar_amcl`). For tooltip display |
+| `backend_ready` | `bool` | Whether the bridge can accept and forward a new initial pose |
+| `reason` | `string` | Human-readable reason when `backend_ready=false` (optional, sensitive information prohibited — same policy as the `NavigationBackendStatus` section) |
 
-- **v0.x series**: The API is not yet stable. **Breaking changes may occur in any release** as the design evolves. Breaking changes for each release are documented in [`CHANGELOG.rst`](./CHANGELOG.rst) and [GitHub Releases](https://github.com/shimz-robotics/mapoi/releases), with step-by-step upgrade guides in [docs/migration/](./docs/migration/)
-- **v1.0.0 and later**: Backward compatibility of the public API (msg / topic / service / launch params / YAML schema, etc.) is guaranteed. Breaking changes will be indicated by a major version bump (e.g., v2.0.0)
+The QoS contract (TRANSIENT_LOCAL / RELIABLE / MANUAL_BY_TOPIC publisher / AUTOMATIC subscriber / 5s lease) is identical to `NavigationBackendStatus`. See the header comment in `msg/LocalizationBackendStatus.msg` for details.
 
-### Planned breaking changes
+## Services (srv)
 
-See [GitHub Milestones](https://github.com/shimz-robotics/mapoi/milestones) for upcoming plans, including any planned breaking changes.
+### SelectMap.srv
 
-## License
+A Nav2-free service for switching the current map context. In operator mode, a map switch is requested via the `/mapoi/nav/switch_map` topic, and `mapoi_nav2_bridge` calls this service before executing Nav2's `LoadMap`.
 
-MIT
+| Direction | Field | Type | Description |
+| --- | --- | --- | --- |
+| Request | `map_name` | `string` | Name of the map to select |
+| Request | `initial_poi_name` | `string` | POI name to use for the initial pose. If empty, the first valid POI is used |
+| Response | `success` | `bool` | Whether the context selection succeeded |
+| Response | `error_message` | `string` | Reason for failure |
+| Response | `config_path` | `string` | Path of the config file after selection |
+| Response | `resolved_initial_poi_name` | `string` | The resolved initial-pose POI name |
+| Response | `nav2_node_names` | `string[]` | Nav2 map server node names |
+| Response | `nav2_map_urls` | `string[]` | Corresponding map YAML paths |
+
+### RequestInitialPose.srv
+
+A service that requests a publish to `mapoi/initialpose_poi` (whose sole writer is `mapoi_server`) (#211). Previously, `mapoi_server` / `mapoi_nav2_bridge` / WebUI / the RViz panel all published directly, but since `transient_local`'s latched cache is kept per writer, this caused stale conflicts across writers. Consolidating all publishing through this service into a single `mapoi_server` unifies the latched cache, so that a clear takes effect as a true last-write-wins.
+
+| Direction | Field | Type | Description |
+| --- | --- | --- | --- |
+| Request | `map_name` | `string` | Target map name (mirrors `InitialPoseRequest.msg`'s `map_name`). If non-empty, it must match `mapoi_server`'s current map; a mismatch means nothing is published and `success=false` (#299). Empty passes through without validation, for a requester with an unknown map |
+| Request | `poi_name` | `string` | POI name to adopt. An empty string means clear (publishes a skip sample, ignored by subscribers) |
+| Response | `success` | `bool` | `true` if the publish succeeded (`false` if rejected due to a `map_name` mismatch, #299) |
+| Response | `error_message` | `string` | Reason for failure (non-empty) |
+
+### GetMapsInfo.srv
+
+A service to get the list of available maps and the current map name.
+
+| Direction | Field | Type | Description |
+| --- | --- | --- | --- |
+| Response | `maps_list` | `string[]` | List of available map names |
+| Response | `map_name` | `string` | Current map name |
+
+### GetPoisInfo.srv
+
+A service to get all POIs registered on the current map.
+
+| Direction | Field | Type | Description |
+| --- | --- | --- | --- |
+| Response | `pois_list` | `PointOfInterest[]` | List of POIs |
+
+### GetRoutePois.srv
+
+A service to get the POIs included in a given route, separated into navigated waypoints and reference-only landmarks (#143).
+
+| Direction | Field | Type | Description |
+| --- | --- | --- | --- |
+| Request | `route_name` | `string` | Route name |
+| Response | `success` | `bool` | `true` if the route was found (also `true` when the route exists but has 0 POIs) (#342) |
+| Response | `error_message` | `string` | Non-empty only when `success=false`. Explains that the route doesn't exist (#342) |
+| Response | `pois_list` | `PointOfInterest[]` | Ordered waypoints on the route (sent to Nav2 as `FollowWaypoints`, or one `NavigateToPose` per waypoint when `waypoint_arrival_mode=mapoi`) |
+| Response | `landmark_pois` | `PointOfInterest[]` | Landmarks attached to the route. Not navigated by Nav2, but radius-monitored while the route is active. Order is informational only |
+
+### GetRoutesInfo.srv
+
+A service to get the list of available routes.
+
+| Direction | Field | Type | Description |
+| --- | --- | --- | --- |
+| Response | `routes_list` | `string[]` | List of route names |
+
+### GetTagDefinitions.srv
+
+A service to get the tag definitions (system tags / user tags).
+
+| Direction | Field | Type | Description |
+| --- | --- | --- | --- |
+| Response | `tag_names` | `string[]` | List of tag names |
+| Response | `tag_descriptions` | `string[]` | List of tag descriptions |
+| Response | `is_system` | `bool[]` | Whether each tag is a system tag (`true` = system tag) |
