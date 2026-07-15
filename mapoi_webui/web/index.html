@@ -1,0 +1,459 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>mapoi Web UI</title>
+  <link rel="stylesheet" href="/vendor/leaflet/leaflet.css" />
+  <link rel="stylesheet" href="/css/style.css" />
+</head>
+<body>
+  <header>
+    <h1>mapoi Web UI</h1>
+    <div id="map-selector">
+      <label id="map-select-label" for="map-select">Map:</label>
+      <select id="map-select"></select>
+    </div>
+  </header>
+
+  <main>
+    <div id="map-container">
+      <div id="map"></div>
+      <div id="map-status"></div>
+      <!-- Cursor 位置の world 座標 readout (#381)。map 上の mousemove 中のみ表示
+           (map-viewer.js が更新)。#map-status (左下) と対になる右下配置。 -->
+      <div id="cursor-readout" class="hidden"></div>
+
+      <!-- 地図上にフロートする UI 一括表示/非表示トグル (#324)。ui-hidden 時も残る
+           ので UI を復帰できる。アイコンは固定の ☰ (Gmail/YouTube の sidebar トグルと
+           同じ流儀、#390)。状態は swap でなく aria-pressed (青ハイライト) とパネル自体の
+           有無で示し、pressed は「UI 表示中」(#449、ロックの「既定状態で点灯」と統一)
+           — 当初の eye/eye-off swap (#324) は「アイコンが状態か操作か」の
+           両義性に加え、地図文脈では marker/レイヤー可視と誤読され得るため置換。
+           ◑/⚙ グリフはダークモード/アプリ設定と誤読されるため不採用 (#324)。
+           overlay / 不透明度の設定はパネル内 Display section (#323)。配線は ui-settings.js。 -->
+      <div id="ui-controls">
+        <!-- 選択中 POI の位置編集 (drag + yaw ハンドル) を明示的にロック/アンロックする
+             (#333)。位置編集はロボット運用の主作業 (ナビゲーション/監視) に対して「たまに
+             行う設定変更」なので、既定はロック (安全側)。ページ再読み込みで再度ロックに
+             戻り、解除状態は永続化しない。対象は選択→即ドラッグできてしまう経路のみ。
+             Add POI 配置クリックや Route waypoint 追加は事前に明示ボタン操作が要るため
+             対象外 (誤操作リスクが無い)。配線は app.js、実体制御は
+             MapViewer.setPoiDraggingAllowed (route 編集中の抑止と AND)。 -->
+        <button id="btn-poi-lock-toggle" type="button" class="ui-control-btn"
+                aria-pressed="true" title="Unlock POI position editing (L)" aria-label="Toggle POI position lock">
+          <svg id="poi-lock-icon-locked" class="ui-control-icon-svg" viewBox="0 0 24 24"
+               fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"
+               stroke-linejoin="round" aria-hidden="true">
+            <rect x="3" y="11" width="18" height="11" rx="2" ry="2"/>
+            <path d="M7 11V7a5 5 0 0 1 10 0v4"/>
+          </svg>
+          <svg id="poi-lock-icon-unlocked" class="ui-control-icon-svg hidden" viewBox="0 0 24 24"
+               fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"
+               stroke-linejoin="round" aria-hidden="true">
+            <rect x="3" y="11" width="18" height="11" rx="2" ry="2"/>
+            <path d="M7 11V7a5 5 0 0 1 9.9-1"/>
+          </svg>
+        </button>
+        <!-- POI ドラッグの誤操作をパネルを開かずに取り消せるよう、undo 履歴がある間だけ
+             出現するフローティング Undo (#332)。パネルの開閉状態と無関係に地図上で
+             marker を選択・ドラッグできるため、モバイルで #poi-body が畳まれていても
+             即座に取り消せる場所に置く。POI 専用 (route の drag はフォームを開いている
+             時にしか発生せず、その時点でパネルは既に展開済みなので同じ問題が無い)。 -->
+        <button id="btn-poi-undo-float" type="button" class="ui-control-btn hidden"
+                title="Undo POI edit (Ctrl+Z)" aria-label="Undo last POI edit">
+          <span class="ui-control-glyph" aria-hidden="true">&#8630;</span>
+        </button>
+        <button id="btn-ui-toggle" type="button" class="ui-control-btn"
+                aria-pressed="true" title="Hide UI (U)" aria-label="Toggle UI visibility">
+          <span class="ui-control-glyph" aria-hidden="true">&#9776;</span>
+        </button>
+        <!-- Help overlay (#391) を開く。ui-hidden 中も #ui-controls は残る仕様なので、
+             UI を隠した状態からでも Help に到達できる。配線は help.js。 -->
+        <button id="btn-help" type="button" class="ui-control-btn"
+                title="Help (?)" aria-label="Open help">
+          <span class="ui-control-glyph" aria-hidden="true">?</span>
+        </button>
+      </div>
+    </div>
+
+    <div id="sidebar-resizer" role="separator" aria-orientation="vertical" title="Drag to resize sidebar"></div>
+
+    <div id="poi-panel">
+      <div id="nav-section" class="panel-section">
+        <div class="section-header">
+          <span>Navigation</span>
+          <div class="section-header-actions">
+            <button id="btn-nav-toggle" class="btn-section-toggle" title="Toggle">&#9660;</button>
+          </div>
+        </div>
+        <div id="nav-body" class="nav-body">
+          <div class="nav-status">
+            <span id="nav-status-dot" class="nav-status-dot nav-status-idle"></span>
+            <span id="nav-status-text">Idle</span>
+          </div>
+          <div id="navigation-availability" class="navigation-availability navigation-unknown">
+            <span id="navigation-availability-dot" class="navigation-availability-dot"></span>
+            <span id="navigation-availability-text">Checking navigation</span>
+          </div>
+          <div id="localization-availability" class="navigation-availability navigation-unknown">
+            <span id="localization-availability-dot" class="navigation-availability-dot"></span>
+            <span id="localization-availability-text">Checking localization</span>
+          </div>
+          <div id="navigation-warning" class="navigation-warning hidden"></div>
+          <div id="navigation-map-switch" class="navigation-map-switch">
+            <label for="navigation-map-select">Robot Map</label>
+            <div class="nav-control-row">
+              <select id="navigation-map-select" class="nav-select">
+                <option value="">-- Select Map --</option>
+              </select>
+            </div>
+          </div>
+          <div class="nav-control-group">
+            <div class="nav-control-row">
+              <select id="nav-goal-select" class="nav-select">
+                <option value="">-- Select POI --</option>
+              </select>
+              <button id="btn-nav-go" class="nav-btn-go">Go</button>
+            </div>
+            <div class="nav-control-row">
+              <select id="nav-route-select" class="nav-select">
+                <option value="">-- Select Route --</option>
+              </select>
+              <button id="btn-nav-run" class="nav-btn-run">Run</button>
+            </div>
+          </div>
+          <div class="nav-pause-resume-row">
+            <button id="btn-nav-pause" class="nav-btn-pause">Pause</button>
+            <button id="btn-nav-resume" class="nav-btn-resume">Resume</button>
+          </div>
+          <button id="btn-nav-stop" class="nav-btn-stop">Stop Navigation</button>
+          <div class="nav-control-label">Initial Pose</div>
+          <div class="nav-control-row">
+            <select id="nav-initialpose-select" class="nav-select">
+              <option value="">-- Select POI --</option>
+            </select>
+            <button id="btn-nav-setpose" class="nav-btn-initialpose">Set Pose</button>
+          </div>
+        </div>
+      </div>
+
+      <div id="tag-section" class="panel-section">
+        <div class="section-header">
+          <span>Tags</span>
+          <div class="section-header-actions">
+            <button id="btn-tag-toggle" class="btn-section-toggle" title="Toggle">&#9660;</button>
+          </div>
+        </div>
+        <div id="tag-body">
+          <div id="tag-list" class="section-body"></div>
+          <div id="tag-add-form" class="tag-add-form">
+            <input type="text" id="tag-add-name" placeholder="Tag name" />
+            <input type="text" id="tag-add-desc" placeholder="Description" />
+            <button id="btn-tag-add">+ Add</button>
+          </div>
+          <div id="tag-toolbar">
+            <button id="btn-save-tags" title="Save tag changes (Ctrl+S)" disabled>Save</button>
+            <button id="btn-discard-tags" title="Discard tag changes" disabled>Discard</button>
+            <span id="tag-dirty-indicator"></span>
+          </div>
+        </div>
+      </div>
+
+      <div id="poi-section" class="panel-section">
+        <div class="section-header">
+          <span>POIs</span>
+          <div class="section-header-actions">
+            <button id="btn-poi-all" class="btn-check-all" title="Check all">All</button>
+            <button id="btn-poi-none" class="btn-check-all" title="Uncheck all">None</button>
+            <button id="btn-poi-toggle" class="btn-section-toggle" title="Toggle">&#9660;</button>
+          </div>
+        </div>
+        <div id="poi-body">
+          <!-- POI list の名前絞り込み (#383)。list 表示のみをフィルタし、map marker の
+               可視状態 (checkbox / All / None) とは独立。配線は poi-editor.js。 -->
+          <input type="search" id="poi-search" placeholder="Filter POIs by name"
+                 autocomplete="off" aria-label="Filter POIs by name" />
+          <div id="poi-list" class="section-body"></div>
+          <div id="poi-edit-form" class="hidden">
+            <h3 id="form-title">Edit POI</h3>
+            <div class="form-row">
+              <label for="poi-name">Name</label>
+              <input type="text" id="poi-name" />
+            </div>
+            <div class="form-row">
+              <label for="poi-x">X</label>
+              <input type="number" id="poi-x" step="0.01" />
+            </div>
+            <div class="form-row">
+              <label for="poi-y">Y</label>
+              <input type="number" id="poi-y" step="0.01" />
+            </div>
+            <div class="form-row">
+              <label for="poi-yaw">Yaw</label>
+              <input type="number" id="poi-yaw" step="0.01" />
+            </div>
+            <div class="form-row">
+              <label for="poi-tolerance-xy">Tolerance.xy (m)</label>
+              <input type="number" id="poi-tolerance-xy" step="0.05" min="0.001" />
+            </div>
+            <div class="form-row">
+              <!-- UI は度 (deg) で入力、内部 / yaml は rad で保存 (#138)。min 0.06° ≒ 0.001 rad で
+                   yaml load の min check と整合。 -->
+              <label for="poi-tolerance-yaw">Tolerance.yaw (deg)</label>
+              <input type="number" id="poi-tolerance-yaw" step="1" min="0.06" />
+            </div>
+            <div class="form-row">
+              <label for="poi-tags">Tags</label>
+              <input type="text" id="poi-tags" placeholder="waypoint, event" />
+            </div>
+            <div class="form-row">
+              <label for="poi-description">Description</label>
+              <input type="text" id="poi-description" />
+            </div>
+            <div class="form-actions">
+              <button id="btn-form-ok">OK</button>
+              <button id="btn-form-cancel">Cancel</button>
+            </div>
+          </div>
+          <div id="poi-toolbar" class="editor-toolbar">
+            <button id="btn-add-poi" class="toolbar-primary" title="Add POI">+ Add POI</button>
+            <span class="toolbar-command-group">
+              <button id="btn-save" title="Save changes (Ctrl+S)" disabled>Save</button>
+              <button id="btn-discard" title="Discard changes" disabled>Discard</button>
+            </span>
+            <span class="toolbar-command-group toolbar-history-group" aria-label="POI history">
+              <button id="btn-undo" class="btn-icon-command" title="Undo (Ctrl+Z)" aria-label="Undo POI edit" disabled>&#8630;</button>
+              <button id="btn-redo" class="btn-icon-command" title="Redo (Ctrl+Shift+Z)" aria-label="Redo POI edit" disabled>&#8631;</button>
+            </span>
+            <span id="dirty-indicator"></span>
+          </div>
+        </div>
+      </div>
+
+      <div id="route-section" class="panel-section">
+        <div class="section-header">
+          <span>Routes</span>
+          <div class="section-header-actions">
+            <button id="btn-route-all" class="btn-check-all" title="Check all">All</button>
+            <button id="btn-route-none" class="btn-check-all" title="Uncheck all">None</button>
+            <button id="btn-route-toggle" class="btn-section-toggle" title="Toggle">&#9660;</button>
+          </div>
+        </div>
+        <div id="route-body">
+          <div id="route-list" class="section-body"></div>
+          <div id="route-edit-form" class="hidden">
+            <h3 id="route-form-title">Edit Route</h3>
+            <div class="form-row">
+              <label for="route-name">Name</label>
+              <input type="text" id="route-name" />
+            </div>
+            <div class="route-wp-section">
+              <label>Waypoints</label>
+              <div id="route-waypoint-list" class="route-waypoint-list"></div>
+              <div class="route-wp-add-row">
+                <select id="route-wp-select" class="route-wp-select">
+                  <option value="">-- Select POI --</option>
+                </select>
+                <button type="button" id="btn-add-waypoint" class="btn-add-wp">+</button>
+              </div>
+              <label class="route-map-insert-toggle" title="Map clicks insert after the selected waypoint">
+                <input
+                  type="checkbox"
+                  id="route-map-insert-toggle"
+                  aria-label="Insert map-clicked POIs after the selected waypoint"
+                />
+                <span>Map click inserts after selected</span>
+              </label>
+            </div>
+            <!-- route.landmarks (#143): この route 走行中に意識する補助 POI 群 (Nav2 へは送らず radius 監視のみ) -->
+            <div class="route-wp-section">
+              <label>Landmarks (optional)</label>
+              <div id="route-landmark-list" class="route-waypoint-list"></div>
+              <div class="route-wp-add-row">
+                <select id="route-lm-select" class="route-wp-select">
+                  <option value="">-- Select landmark POI --</option>
+                </select>
+                <button type="button" id="btn-add-landmark" class="btn-add-wp">+</button>
+              </div>
+              <div class="route-wp-map-hint">Landmark POIs are watched by radius. They are not sent to Nav2.</div>
+            </div>
+            <div class="form-actions">
+              <button id="btn-route-form-ok">OK</button>
+              <button id="btn-route-form-cancel">Cancel</button>
+            </div>
+          </div>
+          <div id="route-toolbar" class="editor-toolbar">
+            <button id="btn-add-route" class="toolbar-primary" title="Add Route">+ Add Route</button>
+            <span class="toolbar-command-group">
+              <button id="btn-save-routes" title="Save route changes (Ctrl+S)" disabled>Save</button>
+              <button id="btn-discard-routes" title="Discard route changes" disabled>Discard</button>
+            </span>
+            <span class="toolbar-command-group toolbar-history-group" aria-label="Route history">
+              <button id="btn-route-undo" class="btn-icon-command" title="Undo route edit (Ctrl+Z)" aria-label="Undo route edit" disabled>&#8630;</button>
+              <button id="btn-route-redo" class="btn-icon-command" title="Redo route edit (Ctrl+Shift+Z)" aria-label="Redo route edit" disabled>&#8631;</button>
+            </span>
+            <span id="route-dirty-indicator"></span>
+          </div>
+        </div>
+      </div>
+
+      <!-- Display section (#323 / #324): overlay / 不透明度の表示設定。UI が見えている
+           時にしか意味がないため地図上のフローティングでなくパネル内に置く。既定折畳。
+           開閉・配線は ui-settings.js (app.js setupSectionToggle とは独立、glyph は同じ)。 -->
+      <div id="display-section" class="panel-section">
+        <div class="section-header">
+          <span>Display</span>
+          <div class="section-header-actions">
+            <button id="btn-display-toggle" class="btn-section-toggle" title="Toggle">&#9654;</button>
+          </div>
+        </div>
+        <div id="display-body" class="display-body" style="display: none;">
+          <label class="display-check">
+            <input type="checkbox" id="ui-overlay-toggle" />
+            <span>Overlay on map</span>
+          </label>
+          <div class="display-row">
+            <label for="ui-alpha-slider">UI opacity</label>
+            <div class="ui-alpha-row">
+              <input type="range" id="ui-alpha-slider" min="30" max="100" step="5" value="100"
+                     aria-label="UI opacity (%)" />
+              <span id="ui-alpha-value" class="ui-alpha-value">100%</span>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </main>
+
+  <!-- Help overlay (#391): 操作方法とショートカット一覧の静的 modal。既定 hidden。
+       サイドパネル案は #poi-panel と場所を取り合い、外部 README リンク案はロボット LAN 等の
+       オフライン環境で開けないため、必須情報は modal 内に自己完結させる (README link は補助)。
+       開閉配線は help.js、`?` キー / Escape は app.js の keydown funnel。
+       focus trap / aria-modal の本格対応は MVP 外 (role="dialog" + aria-label のみ)。
+       メンテ規約: ショートカットや操作を追加する PR は下の該当 table/list も更新する (#391)。 -->
+  <div id="help-overlay" class="hidden" role="dialog" aria-label="Help">
+    <div id="help-dialog">
+      <div id="help-header">
+        <h2>mapoi Web UI — Help</h2>
+        <button id="btn-help-close" type="button" aria-label="Close help">&times;</button>
+      </div>
+      <div id="help-body">
+        <section>
+          <h3>Keyboard shortcuts</h3>
+          <table id="help-shortcut-table">
+            <tbody>
+              <tr><td><kbd>Ctrl</kbd>+<kbd>S</kbd></td>
+                  <td>Save all unsaved changes (an open edit form is confirmed first)</td></tr>
+              <tr><td><kbd>Ctrl</kbd>+<kbd>Z</kbd></td>
+                  <td>Undo (POI edits, or route edits while the route form is open)</td></tr>
+              <tr><td><kbd>Ctrl</kbd>+<kbd>Y</kbd> / <kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>Z</kbd></td>
+                  <td>Redo</td></tr>
+              <tr><td><kbd>Delete</kbd></td>
+                  <td>Delete the selected POI (revert with <kbd>Ctrl</kbd>+<kbd>Z</kbd>)</td></tr>
+              <tr><td><kbd>Escape</kbd></td>
+                  <td>Step back: close this help &rarr; cancel the open edit form / pose placement
+                      &rarr; clear the search box (while typing in it) &rarr; clear the selection</td></tr>
+              <tr><td><kbd>L</kbd></td><td>Lock / unlock POI position editing</td></tr>
+              <tr><td><kbd>U</kbd></td><td>Hide / show the UI panels</td></tr>
+              <tr><td><kbd>?</kbd></td><td>Open this help</td></tr>
+            </tbody>
+          </table>
+          <p class="help-note">On Mac, <kbd>Cmd</kbd> works in place of <kbd>Ctrl</kbd>.
+             If a shortcut does nothing, a Vim-style browser extension (Vimium etc.) may be
+             intercepting keys &mdash; add this site to the extension's exclusion list.</p>
+        </section>
+        <section>
+          <h3>Map operations</h3>
+          <ul>
+            <li>Click a POI marker to select it; double-click to open its edit form.</li>
+            <li>Drag a selected marker to move it, drag the sector handle to rotate its yaw
+                (both need position editing unlocked &mdash; <kbd>L</kbd> or the lock button).</li>
+            <li>While a POI edit form is open, click the map to set the position, then click
+                again to set the yaw (2-click pose tool; <kbd>Escape</kbd> aborts).</li>
+            <li>Click a route line to select the route.</li>
+            <li>Zoom with the mouse wheel or pinch.</li>
+          </ul>
+        </section>
+        <section>
+          <h3>Editing &amp; saving</h3>
+          <ul>
+            <li>Edits change a local working copy only; nothing is written until
+                <strong>Save</strong> (<kbd>Ctrl</kbd>+<kbd>S</kbd>). <strong>Discard</strong>
+                drops the unsaved changes.</li>
+            <li>POIs and routes keep separate undo histories.</li>
+            <li>If the YAML file changed outside this page (another client or a direct edit),
+                Save warns you and lets you reload the latest file or keep editing.</li>
+          </ul>
+        </section>
+        <section>
+          <h3>POI list</h3>
+          <ul>
+            <li>The search box filters the list by name (map markers stay as they are).</li>
+            <li>Checkboxes and <strong>All</strong> / <strong>None</strong> control marker
+                visibility on the map.</li>
+            <li>Selecting a list entry pans the map to an off-screen POI.</li>
+          </ul>
+        </section>
+        <section>
+          <h3>Navigation</h3>
+          <ul>
+            <li>Send the robot to a POI (<strong>Go</strong>), run a route
+                (<strong>Run</strong>), or set the initial pose (<strong>Set Pose</strong>).</li>
+            <li><strong>Pause</strong> / <strong>Resume</strong> / <strong>Stop Navigation</strong>
+                control the current run.</li>
+            <li><strong>Robot Map</strong> switches the map used by the robot &mdash; unsaved
+                edits may be replaced, so save first.</li>
+          </ul>
+        </section>
+        <p class="help-note">Details: <a href="https://github.com/shimz-robotics/mapoi#readme"
+           target="_blank" rel="noopener">README on GitHub</a> (needs internet access).</p>
+      </div>
+    </div>
+  </div>
+
+  <script src="/vendor/leaflet/leaflet.js"></script>
+  <script src="/js/api.js"></script>
+  <!-- geometry.js は MapoiGeometry を window に attach する pure helper 群。
+       map-viewer.js より前に読み込む必要がある (showRoutes 経由で参照される) -->
+  <script src="/js/geometry.js"></script>
+  <!-- poi-filter.js は MapoiPoiFilter を window に attach する pure helper 群 (#85)。
+       app.js より前に読み込む。 -->
+  <script src="/js/poi-filter.js"></script>
+  <!-- poi-interactions.js は MapoiPoiInteractions を window に attach する pure helper 群 (#273)。
+       map-viewer.js より前に読み込む (クリック判別 / wedge 幾何 / 座標変換で参照される)。 -->
+  <script src="/js/poi-interactions.js"></script>
+  <!-- poi-history.js は MapoiPoiHistory を window に attach する pure helper 群 (#300)。
+       poi-editor.js より前に読み込む (Undo/Redo の stack 操作で参照される)。 -->
+  <script src="/js/poi-history.js"></script>
+  <!-- map-icons.js は MapoiMapIcons を window に attach するマーカー/アイコン生成ヘルパー (#346)。
+       map-viewer.js より前に読み込む (POI/ロボット/route アイコン生成で参照される)。 -->
+  <script src="/js/map-icons.js"></script>
+  <!-- map-viewer-sector.js は MapViewerSector クラス (POI 扇形描画 + yaw 回転ハンドル、#346)。
+       map-viewer.js より前に読み込む (MapViewer コンストラクタが new する)。 -->
+  <script src="/js/map-viewer-sector.js"></script>
+  <script src="/js/map-viewer.js"></script>
+  <script src="/js/poi-editor.js"></script>
+  <script src="/js/route-editor.js"></script>
+  <script src="/js/sidebar-resizer.js"></script>
+  <!-- ui-settings.js は #ui-controls を配線し UI オン/オフトグル (#324) と
+       半透明化 (#323) を localStorage 永続で提供する pure/DOM helper。他モジュール非依存。 -->
+  <script src="/js/ui-settings.js"></script>
+  <!-- nav-controls.js は MapoiNavControls を window に attach する pure/DOM helper 群 (#199)。
+       app.js より前に読み込む (updateNavControlsAvailability / map switch / 初期 section で参照)。 -->
+  <script src="/js/nav-controls.js"></script>
+  <!-- toast.js は MapoiToast を window に attach する auto-dismiss 通知 helper (#354)。
+       app.js の SSE ハンドラより前に読み込む。 -->
+  <script src="/js/toast.js"></script>
+  <!-- reload-guard.js は MapoiReloadGuard を window に attach する pure helper 群 (#373)。
+       app.js の SSE ハンドラより前に読み込む (config_changed reload の dirty guard 判定)。 -->
+  <script src="/js/reload-guard.js"></script>
+  <!-- help.js は #help-overlay (#391) の開閉を配線し MapoiHelp を window に attach する。
+       `?` キー / Escape の keyboard 配線は app.js の keydown funnel 側。 -->
+  <script src="/js/help.js"></script>
+  <!-- tag-editor.js は TagEditor クラス (タグ定義エディタ、#346)。app.js が `new TagEditor()` する
+       ため、app.js より前に読み込む。 -->
+  <script src="/js/tag-editor.js"></script>
+  <script src="/js/app.js"></script>
+</body>
+</html>

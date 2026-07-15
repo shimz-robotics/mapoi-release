@@ -1,0 +1,4 @@
+# Retrieve the list of available maps and the currently active map
+---
+string[] maps_list  # Names of all available map directories
+string map_name     # Name of the currently active map

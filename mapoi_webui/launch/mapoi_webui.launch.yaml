@@ -1,0 +1,49 @@
+launch:
+
+- arg:
+    name: maps_path
+    default: ""
+    description: "Full path to maps directory"
+
+- arg:
+    name: map_name
+    default: "turtlebot3_world"
+    description: "Initial map name"
+
+- arg:
+    name: config_file
+    default: "mapoi_config.yaml"
+    description: "Config file name"
+
+- arg:
+    name: web_port
+    default: "8765"
+    description: "HTTP server port"
+
+- arg:
+    name: web_host
+    default: "0.0.0.0"
+    description: "HTTP server bind address"
+
+- arg:
+    name: robot_radius
+    default: "0.15"
+    description: "Robot radius in meters (frontend connector / marker size; default tuned for TurtleBot3)"
+
+- node:
+    pkg: mapoi_webui
+    exec: mapoi_webui_node.py
+    param:
+      - {name: maps_path, value: "$(var maps_path)"}
+      - {name: map_name, value: "$(var map_name)"}
+      - {name: config_file, value: "$(var config_file)"}
+      - {name: web_port, value: "$(var web_port)"}
+      - {name: web_host, value: "$(var web_host)"}
+      # type: float を明示。CLI override `robot_radius:=1` のような整数表記が
+      # int として coerce されると declare_parameter (DOUBLE) と型不一致になる
+      # (Codex PR #126 round 1 medium → round 2 high で identifier 修正)。
+      # launch frontend (humble/jazzy 共通) の有効識別子は "float" のみで
+      # "double" は ValueError で parse 失敗する点に注意。Python float = C++ double
+      # で ROS parameter 上は double param として渡る。
+      - {name: robot_radius, value: "$(var robot_radius)", type: "float"}
+    output: "screen"

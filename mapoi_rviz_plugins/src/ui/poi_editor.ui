@@ -1,0 +1,271 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<ui version="4.0">
+ <class>PoiEditorUi</class>
+ <widget class="QWidget" name="PoiEditorUi">
+  <property name="windowModality">
+   <enum>Qt::WindowModal</enum>
+  </property>
+  <property name="geometry">
+   <rect>
+    <x>0</x>
+    <y>0</y>
+    <width>688</width>
+    <height>478</height>
+   </rect>
+  </property>
+  <property name="sizePolicy">
+   <sizepolicy hsizetype="Preferred" vsizetype="Preferred">
+    <horstretch>0</horstretch>
+    <verstretch>0</verstretch>
+   </sizepolicy>
+  </property>
+  <property name="windowTitle">
+   <string>TestWidget Window</string>
+  </property>
+  <layout class="QVBoxLayout" name="verticalLayout">
+   <item>
+    <layout class="QHBoxLayout" name="horizontalLayout">
+     <item>
+      <widget class="QComboBox" name="MapComboBox">
+       <property name="layoutDirection">
+        <enum>Qt::LeftToRight</enum>
+       </property>
+       <item>
+        <property name="text">
+         <string>map name</string>
+        </property>
+       </item>
+      </widget>
+     </item>
+     <item>
+      <widget class="QComboBox" name="TagFilterComboBox">
+       <property name="currentText">
+        <string/>
+       </property>
+       <property name="currentIndex">
+        <number>-1</number>
+       </property>
+      </widget>
+     </item>
+     <item>
+      <widget class="QLineEdit" name="NameFilterEdit">
+       <property name="placeholderText">
+        <string>Filter POIs by name</string>
+       </property>
+       <property name="clearButtonEnabled">
+        <bool>true</bool>
+       </property>
+      </widget>
+     </item>
+     <item>
+      <widget class="QPushButton" name="ResetButton">
+       <property name="text">
+        <string>reset POIs</string>
+       </property>
+      </widget>
+     </item>
+    </layout>
+   </item>
+   <item>
+    <widget class="QTableWidget" name="PoiTable">
+     <property name="rowCount">
+      <number>2</number>
+     </property>
+     <property name="columnCount">
+      <number>5</number>
+     </property>
+     <row>
+      <property name="text">
+       <string>1</string>
+      </property>
+     </row>
+     <row>
+      <property name="text">
+       <string>2</string>
+      </property>
+     </row>
+     <column>
+      <property name="text">
+       <string>name</string>
+      </property>
+     </column>
+     <column>
+      <property name="text">
+       <string>pose (x, y, yaw)</string>
+      </property>
+     </column>
+     <column>
+      <property name="text">
+       <string>tolerance (xy, yaw)</string>
+      </property>
+     </column>
+     <column>
+      <property name="text">
+       <string>tags</string>
+      </property>
+     </column>
+     <column>
+      <property name="text">
+       <string>description</string>
+      </property>
+     </column>
+     <item row="0" column="0">
+      <property name="text">
+       <string>ELV</string>
+      </property>
+     </item>
+     <item row="0" column="1">
+      <property name="text">
+       <string>1.00, 2.00, 3.00</string>
+      </property>
+     </item>
+     <item row="0" column="2">
+      <property name="text">
+       <string>0.50, 0.79</string>
+      </property>
+     </item>
+     <item row="0" column="3">
+      <property name="text">
+       <string>Destination, landmark</string>
+      </property>
+     </item>
+     <item row="0" column="4">
+      <property name="text">
+       <string>Elevator</string>
+      </property>
+     </item>
+     <item row="1" column="0">
+      <property name="text">
+       <string>TheaterRoom</string>
+      </property>
+     </item>
+     <item row="1" column="1">
+      <property name="text">
+       <string>0.10, 2.40, 5.60</string>
+      </property>
+     </item>
+     <item row="1" column="2">
+      <property name="text">
+       <string>1.00, 0.79</string>
+      </property>
+     </item>
+     <item row="1" column="3">
+      <property name="text">
+       <string>Destination</string>
+      </property>
+     </item>
+     <item row="1" column="4">
+      <property name="text">
+       <string>Theater room</string>
+      </property>
+     </item>
+    </widget>
+   </item>
+   <item>
+    <layout class="QHBoxLayout" name="horizontalLayout_1">
+     <item>
+      <widget class="QPushButton" name="NewButton">
+       <property name="text">
+        <string>New</string>
+       </property>
+      </widget>
+     </item>
+     <item>
+      <widget class="QPushButton" name="CopyButton">
+       <property name="text">
+        <string>Copy</string>
+       </property>
+      </widget>
+     </item>
+     <item>
+      <widget class="QPushButton" name="DeleteButton">
+       <property name="text">
+        <string>Delete</string>
+       </property>
+      </widget>
+     </item>
+     <item>
+      <widget class="QPushButton" name="UndoButton">
+       <property name="enabled">
+        <bool>false</bool>
+       </property>
+       <property name="toolTip">
+        <string>Undo (Ctrl+Z)</string>
+       </property>
+       <property name="text">
+        <string>Undo</string>
+       </property>
+      </widget>
+     </item>
+     <item>
+      <widget class="QPushButton" name="RedoButton">
+       <property name="enabled">
+        <bool>false</bool>
+       </property>
+       <property name="toolTip">
+        <string>Redo (Ctrl+Shift+Z)</string>
+       </property>
+       <property name="text">
+        <string>Redo</string>
+       </property>
+      </widget>
+     </item>
+     <item>
+      <widget class="QComboBox" name="TagHelperComboBox">
+       <item>
+        <property name="text">
+         <string>+ Add tag...</string>
+        </property>
+       </item>
+      </widget>
+     </item>
+     <item>
+      <spacer name="horizontalSpacer">
+       <property name="orientation">
+        <enum>Qt::Horizontal</enum>
+       </property>
+       <property name="sizeHint" stdset="0">
+        <size>
+         <width>40</width>
+         <height>20</height>
+        </size>
+       </property>
+      </spacer>
+     </item>
+     <item>
+      <widget class="QLabel" name="PoiCountLabel">
+       <property name="text">
+        <string>POIs: 0</string>
+       </property>
+      </widget>
+     </item>
+    </layout>
+   </item>
+   <item>
+    <layout class="QHBoxLayout" name="horizontalLayout_2" stretch="1,0">
+     <item>
+      <widget class="QComboBox" name="FileComboBox">
+       <property name="editable">
+        <bool>true</bool>
+       </property>
+       <item>
+        <property name="text">
+         <string>file to save</string>
+        </property>
+       </item>
+      </widget>
+     </item>
+     <item>
+      <widget class="QPushButton" name="SaveButton">
+       <property name="text">
+        <string>save</string>
+       </property>
+      </widget>
+     </item>
+    </layout>
+   </item>
+  </layout>
+ </widget>
+ <resources/>
+ <connections/>
+</ui>

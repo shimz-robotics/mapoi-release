@@ -1,0 +1,123 @@
+launch:
+
+# Arguments
+- let: {name: pkg_name, value: "turtlebot3_navigation2"}
+- arg:
+    name: map
+    default: "$(find-pkg-share turtlebot3_navigation2)/map/map.yaml"
+    description: "Full path to map file to load"
+
+- arg:
+    name: params_file
+    default: "$(find-pkg-share mapoi_turtlebot3_example)/param/$(env ROS_DISTRO)/$(env TURTLEBOT3_MODEL).yaml"
+    description: "Full path to param file to load"
+
+- arg:
+    name: use_sim_time
+    default: "true"
+    description: "Use simulation clock if true"
+
+- arg:
+    name: rviz
+    default: "true"
+    description: "Launch RViz2 (set false for headless)"
+
+- arg:
+    name: gazebo_gui
+    default: "true"
+    description: "Launch シミュレータ GUI (Humble: gzclient / Jazzy: gz sim -g). false で headless. server は常時起動"
+
+- arg:
+    name: waypoint_arrival_mode
+    default: "mapoi"
+    description: >
+      waypoint 到達モード (#243)。mapoi (本 demo の既定) = mapoi が tolerance.xy 到達判定で
+      1 waypoint ずつ進める。nav2 = 従来の Nav2 FollowWaypoints 主導。本 demo の config は
+      mapoi モード前提で調整済 (waypoint tolerance.xy 一律 0.3)。さらに POI を小さくするには
+      param/<distro>/burger.yaml の goal_checker xy_goal_tolerance も下げる。詳細は
+      mapoi_server/README.md「waypoint 到達モード」節。
+      ※ mapoi_nav2_bridge param 自体の既定は nav2 のまま (downstream 影響回避)。本 arg は
+        demo launch だけ mapoi を既定にする。
+
+
+# Gazebo launch (distro 別の headless-aware wrapper を使い分け)
+# - Humble: Gazebo Classic 用 (gazebo_ros gzserver/gzclient を条件化)
+# - Jazzy 以降: gz-sim 用 (ros_gz_sim gz_sim を server/GUI で条件化)
+# 両 wrapper とも gazebo_gui arg を受け、false で headless 起動
+- include:
+    file: "$(find-pkg-share mapoi_turtlebot3_example)/launch/gazebo_headless_aware.launch.yaml"
+    arg:
+      - {name: gazebo_gui, value: "$(var gazebo_gui)"}
+      - {name: use_sim_time, value: "$(var use_sim_time)"}
+    if: $(eval "'$(env ROS_DISTRO)' == 'humble'")
+
+- include:
+    file: "$(find-pkg-share mapoi_turtlebot3_example)/launch/gz_sim_headless_aware.launch.yaml"
+    arg:
+      - {name: gazebo_gui, value: "$(var gazebo_gui)"}
+      - {name: use_sim_time, value: "$(var use_sim_time)"}
+    unless: $(eval "'$(env ROS_DISTRO)' == 'humble'")
+
+
+# Include Nav2 bringup
+- include:
+    file: "$(find-pkg-share nav2_bringup)/launch/bringup_launch.py"
+    arg:
+      - {name: map, value: "$(var map)"}
+      - {name: params_file, value: "$(var params_file)"}
+      - {name: use_sim_time, value: "$(var use_sim_time)"}
+
+
+# RViz2 (skip in headless)
+- node:
+    pkg: rviz2
+    exec: rviz2
+    args: "-d $(find-pkg-share mapoi_turtlebot3_example)/rviz/tb3_navigation2.rviz"
+    param:
+      - {name: use_sim_time, value: "$(var use_sim_time)"}
+    output: "screen"
+    if: $(var rviz)
+
+
+# Mapoi bringup (mapoi_server / mapoi_nav2_bridge / mapoi_rviz2_publisher +
+# simulator に応じて mapoi_gazebo_bridge (Humble) または mapoi_gz_bridge + parameter_bridge (Jazzy))
+- include:
+    file: "$(find-pkg-share mapoi_server)/launch/mapoi_bringup.launch.yaml"
+    arg:
+      - {name: maps_path, value: "$(find-pkg-share mapoi_turtlebot3_example)/maps"}
+      - {name: map_name, value: "turtlebot3_world"}
+      - {name: config_file, value: "mapoi_config.yaml"}
+      - {name: simulator, value: "$(eval \"'gazebo' if '$(env ROS_DISTRO)' == 'humble' else 'gz'\")"}
+      - {name: robot_entity_name, value: "$(env TURTLEBOT3_MODEL)"}
+      - {name: robot_sdf_path, value: "$(find-pkg-share turtlebot3_gazebo)/models/turtlebot3_$(env TURTLEBOT3_MODEL)/model.sdf"}
+      - {name: waypoint_arrival_mode, value: "$(var waypoint_arrival_mode)"}
+
+# Mapoi Web UI
+# robot_radius は Nav2 param (param/$(ROS_DISTRO)/burger.yaml の `robot_radius: 0.1`)
+# と意図的に揃える。両者がずれると「marker は当たっていないのに Nav2 は当たり判定」
+# のような UX の不整合になる (#117)。
+- include:
+    file: "$(find-pkg-share mapoi_webui)/launch/mapoi_webui.launch.yaml"
+    arg:
+      - {name: maps_path, value: "$(find-pkg-share mapoi_turtlebot3_example)/maps"}
+      - {name: map_name, value: "turtlebot3_world"}
+      - {name: config_file, value: "mapoi_config.yaml"}
+      - {name: web_port, value: "8765"}
+      - {name: web_host, value: "0.0.0.0"}
+      - {name: robot_radius, value: "0.1"}
+
+# PoiEvent 駆動 demo subscriber (#238): 本 launch は base navigation / Nav2 / mapoi_server /
+# WebUI のみを集約する。`audio_guide_node` / `camera_node` 等の demo subscriber は別 launch
+# (`mapoi_event_samples.launch.yaml`) で起動する分離方針 (#230 で確定、#238 で実装)。
+#   - subscriber を立ち上げずに /mapoi/events の発火だけ確認 → ros2 topic echo /mapoi/events
+#   - subscriber を立ち上げて demo シナリオを動かす → ros2 launch mapoi_turtlebot3_example
+#     mapoi_event_samples.launch.yaml を別 shell で起動 (README "PoiEvent 駆動 sample
+#     subscriber" 節参照)
+#
+# README 未読 user が `[AUDIO_GUIDE]` / `[CAMERA]` log を見つけられず「demo が壊れた」と
+# 誤解するのを防ぐため、起動時に誘導 log を 1 行出す (#247 review High #1)。
+- log:
+    message: >
+      [mapoi_turtlebot3_example] demo subscriber (audio_guide_node / camera_node) は本 launch
+      には含まれません (#238 で分離)。pause 中の撮影 mock / audio guide mock を動かすには別 shell で
+      'ros2 launch mapoi_turtlebot3_example mapoi_event_samples.launch.yaml' を起動してください。

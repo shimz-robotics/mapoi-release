@@ -1,0 +1,23 @@
+# switch_map E2E launch_test 用 fixture (map A)。#299 テスト残課題 / #297 再現テストで使う。
+# map_file (map_a.yaml) は実在しない: LoadMap は FakeMapServer (nav2_mocks.py) が
+# 中身を見ずに応答するため、URL の突き合わせだけできればよい。
+# POI list 先頭 (= initial pose default 採用) が map ごとに一意な名前になるようにする。
+poi:
+  - name: map_a_start
+    pose: {x: 1.0, y: 2.0, yaw: 0.0}
+    tolerance: {xy: 0.5, yaw: 0.785}
+    tags: [waypoint]
+    description: "map A の initial pose 候補 (POI list 先頭)"
+  - name: map_a_goal
+    pose: {x: 3.0, y: 4.0, yaw: 0.0}
+    tolerance: {xy: 0.5, yaw: 0.785}
+    tags: [waypoint]
+    description: "map A の 2 番目 POI"
+
+map:
+  - {node_name: /map_server, map_file: map_a.yaml}
+
+# get_route_pois の success/error_message 契約 pin 用 (#342、test_select_map_validation.py)。
+route:
+  - name: route_a_full
+    waypoints: [map_a_start, map_a_goal]

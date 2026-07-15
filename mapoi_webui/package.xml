@@ -1,0 +1,37 @@
+<?xml version="1.0"?>
+<?xml-model href="http://download.ros.org/schema/package_format3.xsd" schematypens="http://www.w3.org/2001/XMLSchema"?>
+<package format="3">
+  <name>mapoi_webui</name>
+  <version>0.6.0</version>
+  <description>Web UI for mapoi - POI editing, navigation, and robot monitoring</description>
+  <maintainer email="kimura.shunsuke@shimz.co.jp">Shunsuke Kimura</maintainer>
+  <license>MIT</license>
+  <url type="repository">https://github.com/shimz-robotics/mapoi</url>
+  <url type="bugtracker">https://github.com/shimz-robotics/mapoi/issues</url>
+  <author email="kimura.shunsuke@shimz.co.jp">Shunsuke Kimura</author>
+
+  <buildtool_depend>ament_cmake</buildtool_depend>
+  <buildtool_depend>ament_cmake_python</buildtool_depend>
+
+  <depend>rclpy</depend>
+  <depend>std_srvs</depend>
+  <depend>std_msgs</depend>
+  <depend>mapoi_interfaces</depend>
+  <depend>tf2_ros</depend>
+
+  <exec_depend>python3-flask</exec_depend>
+  <exec_depend>python3-pil</exec_depend>
+  <exec_depend>python3-yaml</exec_depend>
+  <!-- mapoi_editor.launch.yaml が mapoi_server の launch を include する (ament_index で
+       share dir 解決) + runtime に mapoi_server ノードが起動している必要あり
+       (mapoi/get_tag_definitions / mapoi/reload_map_info service の responder として)。 -->
+  <exec_depend>mapoi_server</exec_depend>
+
+  <test_depend>ament_lint_auto</test_depend>
+  <test_depend>ament_lint_common</test_depend>
+  <test_depend>ament_cmake_pytest</test_depend>
+
+  <export>
+    <build_type>ament_cmake</build_type>
+  </export>
+</package>

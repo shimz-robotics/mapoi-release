@@ -1,0 +1,213 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<ui version="4.0">
+ <class>ScUI</class>
+ <widget class="QWidget" name="ScUI">
+  <property name="windowModality">
+   <enum>Qt::WindowModal</enum>
+  </property>
+  <property name="geometry">
+   <rect>
+    <x>0</x>
+    <y>0</y>
+    <width>706</width>
+    <height>160</height>
+   </rect>
+  </property>
+  <property name="sizePolicy">
+   <sizepolicy hsizetype="Preferred" vsizetype="Preferred">
+    <horstretch>0</horstretch>
+    <verstretch>0</verstretch>
+   </sizepolicy>
+  </property>
+  <property name="windowTitle">
+   <string>TestWidget Window</string>
+  </property>
+  <layout class="QVBoxLayout" name="verticalLayout">
+   <item>
+    <layout class="QHBoxLayout" name="horizontalLayout_map">
+     <item>
+      <widget class="QComboBox" name="MapComboBox">
+       <property name="editable">
+        <bool>false</bool>
+       </property>
+      </widget>
+     </item>
+    </layout>
+   </item>
+   <item>
+    <layout class="QHBoxLayout" name="horizontalLayout_goal">
+     <item>
+      <widget class="QComboBox" name="Nav2GoalComboBox">
+       <property name="editable">
+        <bool>false</bool>
+       </property>
+      </widget>
+     </item>
+     <item>
+      <widget class="QPushButton" name="LocalizationButton">
+       <property name="text">
+        <string>Initial Pose</string>
+       </property>
+       <property name="autoDefault">
+        <bool>true</bool>
+       </property>
+       <property name="default">
+        <bool>false</bool>
+       </property>
+       <property name="flat">
+        <bool>false</bool>
+       </property>
+      </widget>
+     </item>
+     <item>
+      <widget class="QPushButton" name="RunGoalButton">
+       <property name="text">
+        <string>Run Goal</string>
+       </property>
+       <property name="autoDefault">
+        <bool>true</bool>
+       </property>
+      </widget>
+     </item>
+    </layout>
+   </item>
+   <item>
+    <layout class="QHBoxLayout" name="horizontalLayout_route">
+     <item>
+      <widget class="QComboBox" name="MapoiRouteComboBox"/>
+     </item>
+     <item>
+      <widget class="QPushButton" name="RunRouteButton">
+       <property name="text">
+        <string>Run Route</string>
+       </property>
+       <property name="autoDefault">
+        <bool>true</bool>
+       </property>
+      </widget>
+     </item>
+     <item>
+      <widget class="QPushButton" name="PauseButton">
+       <property name="text">
+        <string>Pause</string>
+       </property>
+       <property name="autoDefault">
+        <bool>true</bool>
+       </property>
+      </widget>
+     </item>
+     <item>
+      <widget class="QPushButton" name="ResumeButton">
+       <property name="text">
+        <string>Resume</string>
+       </property>
+       <property name="autoDefault">
+        <bool>true</bool>
+       </property>
+      </widget>
+     </item>
+     <item>
+      <widget class="QPushButton" name="StopButton">
+       <property name="acceptDrops">
+        <bool>false</bool>
+       </property>
+       <property name="autoFillBackground">
+        <bool>true</bool>
+       </property>
+       <property name="text">
+        <string>Stop</string>
+       </property>
+       <property name="autoDefault">
+        <bool>true</bool>
+       </property>
+      </widget>
+     </item>
+    </layout>
+   </item>
+   <item>
+    <!-- NavStatusLabel / RouteProgressLabel / CommandRejectedLabel は状態・一時表示用。
+         出現/消滅でレイアウトが上下しないよう常駐させ (hide しない)、idle 時は
+         「<caption>: —」をグレー表示して空白行に見えないようにする (#451)。
+         idle 表示の正本は MapoiPanel::Set*Idle で、constructor が setupUi 直後に
+         上書きする。ここの text / styleSheet は Designer プレビュー用 (実表示には
+         使われない)。 -->
+    <widget class="QLabel" name="NavStatusLabel">
+     <property name="text">
+      <string>Nav status: —</string>
+     </property>
+     <property name="styleSheet">
+      <string notr="true">color: gray;</string>
+     </property>
+    </widget>
+   </item>
+   <item>
+    <widget class="QLabel" name="RouteProgressLabel">
+     <property name="text">
+      <string>Route progress: —</string>
+     </property>
+     <property name="styleSheet">
+      <string notr="true">color: gray;</string>
+     </property>
+     <property name="textFormat">
+      <enum>Qt::PlainText</enum>
+     </property>
+    </widget>
+   </item>
+   <item>
+    <widget class="QLabel" name="CommandRejectedLabel">
+     <property name="text">
+      <string>Notice: —</string>
+     </property>
+     <property name="styleSheet">
+      <string notr="true">color: gray;</string>
+     </property>
+     <property name="textFormat">
+      <enum>Qt::PlainText</enum>
+     </property>
+    </widget>
+   </item>
+   <item>
+    <layout class="QHBoxLayout" name="horizontalLayout_backend_status">
+     <item>
+      <widget class="QLabel" name="NavBackendStatusLabel">
+       <property name="text">
+        <string></string>
+       </property>
+       <property name="textFormat">
+        <enum>Qt::PlainText</enum>
+       </property>
+      </widget>
+     </item>
+     <item>
+      <widget class="QLabel" name="LocBackendStatusLabel">
+       <property name="text">
+        <string></string>
+       </property>
+       <property name="textFormat">
+        <enum>Qt::PlainText</enum>
+       </property>
+      </widget>
+     </item>
+    </layout>
+   </item>
+   <item>
+    <spacer name="bottomSpacer">
+     <property name="orientation">
+      <enum>Qt::Vertical</enum>
+     </property>
+     <property name="sizeType">
+      <enum>QSizePolicy::Expanding</enum>
+     </property>
+     <property name="sizeHint" stdset="0">
+      <size>
+       <width>0</width>
+       <height>0</height>
+      </size>
+     </property>
+    </spacer>
+   </item>
+  </layout>
+ </widget>
+ <resources/>
+ <connections/>
+</ui>
