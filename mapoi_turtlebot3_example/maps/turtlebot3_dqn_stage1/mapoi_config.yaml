@@ -1,0 +1,72 @@
+# シナリオ: 障害物 sandbox での回避走行 (ハザード回避 + 観察 + 通過点)。
+# 検証カバレッジ (#146): 複合 tag (landmark + custom hazard)、tolerance.yaw=π で
+# yaw 不問の通過点 (= pass_through 代替)、pause 中継、route の landmarks 利用。
+custom_tags:
+- {name: hazard, description: Hazard zone (avoidance target)}
+- {name: checkpoint, description: Intermediate waypoint}
+- {name: observation, description: Observation point (landmark で参照する観察対象)}
+
+route:
+# avoidance_a: 西回り。waypoints + landmarks 両方持ちで、ハザード / 観察対象を route 走行中
+# だけ監視対象に。
+- name: avoidance_a
+  waypoints: [start_zone, checkpoint_west, pause_intersection, north_goal]
+  landmarks: [hazard_south, observation_point]
+# avoidance_b: 東回り。landmarks 無しの短縮版。
+- name: avoidance_b
+  waypoints: [start_zone, checkpoint_east, north_goal]
+
+map:
+- {node_name: /map_server, map_file: turtlebot3_dqn_stage1.yaml}
+
+# mapoi_gazebo_bridge が operator map switch 時に読む (ground_plane / sun は共通、world を構成する主モデルのみ swap)
+gazebo:
+  world_model:
+    uri: model://turtlebot3_dqn_world
+    name: turtlebot3_dqn_world
+
+# turtlebot3_world (office テーマ) と視覚的区別を明確にするため、obstacle 多数の sandbox world で
+# navigation 精度が要求されるシーンに合わせて配置・tolerance.xy ともに不均一化。tolerance.xy は
+# Nav2 controller の xy_goal_tolerance (0.25) より大きく取る (Nav2 が POI tolerance.xy 内に入る前
+# にゴール判定で停止し、radius event が発火しないため)。最小 0.30 (5cm 余裕)、最大 0.45 で意味付け。
+# tolerance.yaw は >= 0.001 (rad) を指定する (msg spec #138 で 0 / 負値は禁止)。
+# default 0.785 (≒ π/4 = 45°)、yaw 厳密目標は 0.10 (≒ 5.7°)、yaw 不問の通過点は 3.14 (≒ 180°)。
+# start_zone は POI list 先頭 (= default initial pose、#149) で Gazebo spawn の (0, 0) と一致。
+poi:
+- name: start_zone
+  description: 開始地点 (POI list 先頭 = default initial pose)
+  pose: {x: 0.0, y: 0.0, yaw: 0.0}
+  tolerance: {xy: 0.40, yaw: 0.785}
+  tags: [waypoint]
+- name: checkpoint_west
+  description: 西側中継点 (yaw 不問の通過点、tolerance.yaw=π)
+  pose: {x: -1.6, y: 0.5, yaw: 1.57}
+  tolerance: {xy: 0.35, yaw: 3.14}
+  tags: [waypoint, checkpoint]
+- name: checkpoint_east
+  description: 東側中継点 (yaw 不問の通過点、tolerance.yaw=π)
+  pose: {x: 1.4, y: -0.3, yaw: -1.6}
+  tolerance: {xy: 0.30, yaw: 3.14}
+  tags: [waypoint, checkpoint]
+- name: pause_intersection
+  description: 交差点で自動停止 (avoidance_a の連続走行で pause 発火を検証)
+  pose: {x: -0.4, y: 1.0, yaw: 1.57}
+  tolerance: {xy: 0.30, yaw: 3.14}
+  tags: [waypoint, pause]
+- name: north_goal
+  description: 北側目標地点 (yaw 厳密)
+  pose: {x: 0.4, y: 1.7, yaw: -2.0}
+  tolerance: {xy: 0.30, yaw: 0.10}
+  tags: [waypoint]
+# 以下 landmark 群: Nav2 navigation 不可な reference 点 (#85, #143)。
+# avoidance_a の landmarks: [...] で route 走行中だけ radius event 監視対象。
+- name: hazard_south
+  description: 南側ハザード (landmark + custom hazard、Nav2 goal 不可な複合 tag)
+  pose: {x: 0.5, y: -1.3, yaw: 0.0}
+  tolerance: {xy: 0.45, yaw: 0.785}
+  tags: [landmark, hazard]
+- name: observation_point
+  description: 観察対象 (landmark + observation、route 走行中の参照点)
+  pose: {x: -1.0, y: -0.6, yaw: 0.0}
+  tolerance: {xy: 0.30, yaw: 0.785}
+  tags: [landmark, observation]

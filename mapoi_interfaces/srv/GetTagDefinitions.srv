@@ -1,0 +1,3 @@
+# Retrieve all known tag definitions (system + user-defined)
+---
+mapoi_interfaces/TagDefinition[] definitions  # List of all tag definitions

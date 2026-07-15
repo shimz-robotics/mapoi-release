@@ -1,0 +1,52 @@
+name: Bug report
+description: Report a problem with mapoi
+labels: [bug]
+body:
+  - type: dropdown
+    id: ros-distro
+    attributes:
+      label: ROS distro
+      options:
+        - humble
+        - jazzy
+    validations:
+      required: true
+  - type: dropdown
+    id: install-method
+    attributes:
+      label: Installation method
+      options:
+        - Source build (colcon)
+        - Docker (ghcr.io image / docker compose)
+    validations:
+      required: true
+  - type: textarea
+    id: reproduce
+    attributes:
+      label: Steps to reproduce
+      description: Commands and configuration needed to reproduce the problem
+      placeholder: |
+        1. ros2 launch mapoi_turtlebot3_example turtlebot3_navigation.launch.yaml
+        2. ...
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: Expected behavior
+    validations:
+      required: true
+  - type: textarea
+    id: actual
+    attributes:
+      label: Actual behavior
+      description: What happens instead. Include error messages / logs if available.
+    validations:
+      required: true
+  - type: textarea
+    id: additional
+    attributes:
+      label: Additional context
+      description: mapoi version or commit, environment details, screenshots, etc.
+    validations:
+      required: false

@@ -1,0 +1,17 @@
+<library path="mapoi_rviz_plugins">
+  <class name="mapoi_rviz_plugins/MapoiPanel" type="mapoi_rviz_plugins::MapoiPanel" base_class_type="rviz_common::Panel">
+    <description>
+      Set pull down from destination list.
+    </description>
+  </class>
+  <class name="mapoi_rviz_plugins/PoiEditor" type="mapoi_rviz_plugins::PoiEditorPanel" base_class_type="rviz_common::Panel">
+    <description>
+      Load and Edit POIs on the table.
+    </description>
+  </class>
+    <class name="mapoi_rviz_plugins/MapoiPoseTool" type="mapoi_rviz_plugins::MapoiPoseTool" base_class_type="rviz_common::Tool">
+    <description>
+      Publish a pose for mapoi. After one use, reverts to default tool.
+    </description>
+  </class>
+</library>
