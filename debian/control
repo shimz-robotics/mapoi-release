@@ -1,0 +1,12 @@
+Source: ros-jazzy-mapoi
+Section: misc
+Priority: optional
+Maintainer: "Shunsuke Kimura" <kimura.shunsuke@shimz.co.jp>
+Build-Depends: debhelper (>= 9.0.0), ros-jazzy-ament-cmake, ros-jazzy-ros-workspace
+Homepage: https://index.ros.org/p/mapoi/#jazzy
+Standards-Version: 3.9.2
+
+Package: ros-jazzy-mapoi
+Architecture: any
+Depends: ${shlibs:Depends}, ${misc:Depends}, ros-jazzy-mapoi-interfaces, ros-jazzy-mapoi-rviz-plugins, ros-jazzy-mapoi-server, ros-jazzy-mapoi-webui, ros-jazzy-ros-workspace
+Description: Metapackage for mapoi: map and POI management for Navigation2
