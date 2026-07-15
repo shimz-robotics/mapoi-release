@@ -1,0 +1,81 @@
+# mapoi 用 Docker Compose
+#
+# GUI（RViz2 / Gazebo）を使う前にホスト側で実行:
+#   xhost +local:docker
+#
+# 開発用 (bind mount + bash):
+#   docker compose run --rm dev                    # default: Jazzy (gz-sim)
+#   ROS_DISTRO=humble docker compose run --rm dev  # Humble (Gazebo Classic)
+#
+# お試し/デモ (Turtlebot3 + Gazebo + mapoi):
+#   docker compose up demo                    # default: Jazzy (gz-sim)
+#   ROS_DISTRO=humble docker compose up demo  # Humble (Gazebo Classic)
+#
+# distro 選択: ${ROS_DISTRO:-jazzy} (shell / .env で非空ならその値、空または未設定なら jazzy)
+# image: mapoi:<service>-${ROS_DISTRO} で distro 別保存、並行運用可、切替時 rebuild 不要
+# 詳細: README "ソースから docker compose build" 節
+services:
+  dev:
+    build:
+      context: .
+      target: dev
+      args:
+        ROS_DISTRO: ${ROS_DISTRO:-jazzy}
+        USER_ID: ${USER_ID:-1000}
+        GROUP_ID: ${GROUP_ID:-1000}
+    # image タグに ROS_DISTRO を含めて distro 別に保持する。
+    # 共通タグ (mapoi:dev) だと build arg を変えても 'docker compose run' は前回 build を
+    # silently 再利用する (ARG 変更で cache invalidate されるのは build 時のみ)。
+    # distro 別タグなら humble / jazzy 両 image を独立保持でき、切替時の rebuild も並行運用も不要。
+    image: mapoi:dev-${ROS_DISTRO:-jazzy}
+    network_mode: host
+    ipc: host
+    environment:
+      - DISPLAY=${DISPLAY}
+      - QT_X11_NO_MITSHM=1
+      - TURTLEBOT3_MODEL=${TURTLEBOT3_MODEL:-burger}
+      # Gazebo のオンライン model database fetch を無効化。
+      # 初回起動時に gazebosim.org へアクセスしに行って spawn_entity が 30s timeout で
+      # 死ぬのを防ぐ。turtlebot3 world は apt の turtlebot3_gazebo のローカルモデルで動く。
+      - GAZEBO_MODEL_DATABASE_URI=
+      # DDS 環境: 真の leak 問題は host の custom CYCLONEDDS_URI が container に継承されること
+      # (例: opera_shimz_ws の cyclonedds.conf) なので URI のみ空で hardcode 無効化。
+      # RMW / DOMAIN_ID は host と一致しないと container <-> host 間の discovery が成立しない
+      # (network_mode: host + ipc: host でリソース共有するため両端が一致する必要あり)。
+      # よって RMW / DOMAIN_ID は host 値を継承、未設定時のみ fallback default。
+      - RMW_IMPLEMENTATION=${RMW_IMPLEMENTATION:-rmw_fastrtps_cpp}
+      - ROS_DOMAIN_ID=${ROS_DOMAIN_ID:-0}
+      - CYCLONEDDS_URI=
+    volumes:
+      - ./:/ros2_ws/src/mapoi
+      - /tmp/.X11-unix:/tmp/.X11-unix
+      - ${HOME}/.Xauthority:/home/ros/.Xauthority:ro
+    working_dir: /ros2_ws
+    command: bash
+    stdin_open: true
+    tty: true
+
+  demo:
+    build:
+      context: .
+      target: runtime
+      args:
+        ROS_DISTRO: ${ROS_DISTRO:-jazzy}
+        USER_ID: ${USER_ID:-1000}
+        GROUP_ID: ${GROUP_ID:-1000}
+    # dev と同じく distro 別タグで保持
+    image: mapoi:demo-${ROS_DISTRO:-jazzy}
+    network_mode: host
+    ipc: host
+    environment:
+      - DISPLAY=${DISPLAY}
+      - QT_X11_NO_MITSHM=1
+      - TURTLEBOT3_MODEL=${TURTLEBOT3_MODEL:-burger}
+      - GAZEBO_MODEL_DATABASE_URI=
+      # DDS 環境 (dev と同じ理由、詳細は dev 側コメント参照): URI のみ空で leak block、RMW/DOMAIN_ID は host 継承
+      - RMW_IMPLEMENTATION=${RMW_IMPLEMENTATION:-rmw_fastrtps_cpp}
+      - ROS_DOMAIN_ID=${ROS_DOMAIN_ID:-0}
+      - CYCLONEDDS_URI=
+    volumes:
+      - /tmp/.X11-unix:/tmp/.X11-unix
+      - ${HOME}/.Xauthority:/home/ros/.Xauthority:ro
