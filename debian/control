@@ -1,0 +1,12 @@
+Source: ros-jazzy-mapoi-webui
+Section: misc
+Priority: optional
+Maintainer: "Shunsuke Kimura" <kimura.shunsuke@shimz.co.jp>
+Build-Depends: debhelper (>= 9.0.0), ros-jazzy-ament-cmake, ros-jazzy-ament-cmake-pytest <!nocheck>, ros-jazzy-ament-cmake-python, ros-jazzy-ament-lint-auto <!nocheck>, ros-jazzy-ament-lint-common <!nocheck>, ros-jazzy-mapoi-interfaces, ros-jazzy-rclpy, ros-jazzy-std-msgs, ros-jazzy-std-srvs, ros-jazzy-tf2-ros, ros-jazzy-ros-workspace
+Homepage: https://index.ros.org/p/mapoi_webui/#jazzy
+Standards-Version: 3.9.2
+
+Package: ros-jazzy-mapoi-webui
+Architecture: any
+Depends: ${shlibs:Depends}, ${misc:Depends}, python3-flask, python3-pil, python3-yaml, ros-jazzy-mapoi-interfaces, ros-jazzy-mapoi-server, ros-jazzy-rclpy, ros-jazzy-std-msgs, ros-jazzy-std-srvs, ros-jazzy-tf2-ros, ros-jazzy-ros-workspace
+Description: Web UI for mapoi - POI editing, navigation, and robot monitoring
