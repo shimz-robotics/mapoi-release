@@ -1,0 +1,12 @@
+Source: ros-humble-mapoi-turtlebot3-example
+Section: misc
+Priority: optional
+Maintainer: "Shunsuke Kimura" <kimura.shunsuke@shimz.co.jp>
+Build-Depends: debhelper (>= 9.0.0), python3-yaml <!nocheck>, ros-humble-ament-cmake, ros-humble-ament-cmake-auto, ros-humble-ament-cmake-pytest <!nocheck>, ros-humble-ament-index-cpp, ros-humble-ament-lint-auto <!nocheck>, ros-humble-ament-lint-common <!nocheck>, ros-humble-geometry-msgs, ros-humble-mapoi-interfaces, ros-humble-nav2-msgs, ros-humble-rclcpp, ros-humble-rclcpp-action, ros-humble-std-msgs, ros-humble-std-srvs, ros-humble-tf2, ros-humble-tf2-geometry-msgs, ros-humble-yaml-cpp-vendor, ros-humble-ros-workspace
+Homepage: https://index.ros.org/p/mapoi_turtlebot3_example/#humble
+Standards-Version: 3.9.2
+
+Package: ros-humble-mapoi-turtlebot3-example
+Architecture: any
+Depends: ${shlibs:Depends}, ${misc:Depends}, ros-humble-ament-cmake-auto, ros-humble-ament-index-cpp, ros-humble-geometry-msgs, ros-humble-mapoi-interfaces, ros-humble-mapoi-rviz-plugins, ros-humble-mapoi-server, ros-humble-mapoi-webui, ros-humble-nav2-msgs, ros-humble-rclcpp, ros-humble-rclcpp-action, ros-humble-std-msgs, ros-humble-std-srvs, ros-humble-tf2, ros-humble-tf2-geometry-msgs, ros-humble-turtlebot3, ros-humble-turtlebot3-gazebo, ros-humble-turtlebot3-navigation2, ros-humble-yaml-cpp-vendor, ros-humble-ros-workspace
+Description: TurtleBot3 simulation example for mapoi with sample maps and client nodes
