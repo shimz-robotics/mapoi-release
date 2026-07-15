@@ -1,0 +1,11 @@
+# switch_map E2E launch_test 用 fixture (map B)。test_map_a と POI 名を重複させないことで、
+# initialpose_poi の latched 値がどちらの map 由来かを名前だけで判別できるようにする。
+poi:
+  - name: map_b_start
+    pose: {x: -1.0, y: -2.0, yaw: 0.0}
+    tolerance: {xy: 0.5, yaw: 0.785}
+    tags: [waypoint]
+    description: "map B の initial pose 候補 (POI list 先頭)"
+
+map:
+  - {node_name: /map_server, map_file: map_b.yaml}

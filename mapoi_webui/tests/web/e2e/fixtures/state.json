@@ -1,0 +1,83 @@
+{
+  "_comment": "mapoi_webui e2e モックサーバが返す決定論的フィクスチャ (#284)。形状は実 backend (mapoi_webui_node.py) / フロント (api.js, app.js, map-viewer.js) 由来。",
+  "maps": ["test_map"],
+  "current_map": "test_map",
+  "metadata": {
+    "resolution": 0.05,
+    "origin": [-5.0, -5.0, 0.0],
+    "width": 200,
+    "height": 200
+  },
+  "config_version": "fixture-v1",
+  "pois": [
+    {
+      "name": "poi_wedge",
+      "pose": { "x": -2.0, "y": -1.0, "yaw": 0.0 },
+      "tolerance": { "xy": 0.3, "yaw": 0.7854 },
+      "tags": ["waypoint"],
+      "description": "Wedge POI (yaw tol 45deg, 0<yaw<pi -> 扇形 + 回転ハンドル)"
+    },
+    {
+      "name": "poi_wedge2",
+      "pose": { "x": -1.0, "y": -1.0, "yaw": 1.5708 },
+      "tolerance": { "xy": 0.3, "yaw": 1.0472 },
+      "tags": ["waypoint"],
+      "description": "Wedge POI 2"
+    },
+    {
+      "name": "poi_disc",
+      "pose": { "x": 0.0, "y": 0.0, "yaw": 0.0 },
+      "tolerance": { "xy": 0.25, "yaw": 3.15 },
+      "tags": ["waypoint"],
+      "description": "Disc POI (yaw tol >= pi -> 塗り円, yaw 不問, ハンドルなし)"
+    },
+    {
+      "name": "poi_pause",
+      "pose": { "x": 1.0, "y": 1.0, "yaw": 0.1 },
+      "tolerance": { "xy": 0.4, "yaw": 1.5708 },
+      "tags": ["waypoint", "pause"],
+      "description": "Pause POI (dot pattern overlay)"
+    },
+    {
+      "name": "poi_landmark",
+      "pose": { "x": 1.5, "y": -1.5, "yaw": -0.4 },
+      "tolerance": { "xy": 0.35, "yaw": 0.7854 },
+      "tags": ["landmark"],
+      "description": "Landmark POI linked from test_route"
+    }
+  ],
+  "tags": [
+    { "name": "waypoint", "description": "Navigation waypoint", "is_system": true },
+    { "name": "landmark", "description": "Reference POI used for route context and radius monitoring; not sent to Nav2 as a navigation target", "is_system": true },
+    { "name": "pause", "description": "Robot pauses at this POI", "is_system": true }
+  ],
+  "routes": [
+    {
+      "name": "test_route",
+      "waypoints": ["poi_wedge", "poi_disc", "poi_pause"],
+      "landmarks": ["poi_landmark"]
+    }
+  ],
+  "nav_status": {
+    "status": "idle",
+    "target": "",
+    "robot_pose": { "x": -2.0, "y": -1.0, "yaw": 0.0 },
+    "robot_radius": 0.15,
+    "navigation": {
+      "navigation_available": true,
+      "switch_map_available": true,
+      "command_available": true,
+      "topics": {
+        "goal": { "topic": "mapoi/nav/goal_pose_poi", "subscribers": 1, "available": true },
+        "route": { "topic": "mapoi/nav/route", "subscribers": 1, "available": true },
+        "cancel": { "topic": "mapoi/nav/cancel", "subscribers": 1, "available": true },
+        "pause": { "topic": "mapoi/nav/pause", "subscribers": 1, "available": true },
+        "resume": { "topic": "mapoi/nav/resume", "subscribers": 1, "available": true },
+        "switch_map": { "topic": "mapoi/nav/switch_map", "subscribers": 1, "available": true },
+        "initialpose": { "topic": "mapoi/initialpose_poi", "subscribers": 1, "available": true }
+      },
+      "backend_status": { "backend_type": "Nav2", "backend_ready": true, "reason": "healthy" },
+      "localization_status": null
+    }
+  }
+}
