@@ -1,0 +1,12 @@
+Source: ros-humble-mapoi-webui
+Section: misc
+Priority: optional
+Maintainer: "Shunsuke Kimura" <kimura.shunsuke@shimz.co.jp>
+Build-Depends: debhelper (>= 9.0.0), ros-humble-ament-cmake, ros-humble-ament-cmake-pytest <!nocheck>, ros-humble-ament-cmake-python, ros-humble-ament-lint-auto <!nocheck>, ros-humble-ament-lint-common <!nocheck>, ros-humble-mapoi-interfaces, ros-humble-rclpy, ros-humble-std-msgs, ros-humble-std-srvs, ros-humble-tf2-ros, ros-humble-ros-workspace
+Homepage: https://index.ros.org/p/mapoi_webui/#humble
+Standards-Version: 3.9.2
+
+Package: ros-humble-mapoi-webui
+Architecture: any
+Depends: ${shlibs:Depends}, ${misc:Depends}, python3-flask, python3-pil, python3-yaml, ros-humble-mapoi-interfaces, ros-humble-mapoi-server, ros-humble-rclpy, ros-humble-std-msgs, ros-humble-std-srvs, ros-humble-tf2-ros, ros-humble-ros-workspace
+Description: Web UI for mapoi - POI editing, navigation, and robot monitoring
