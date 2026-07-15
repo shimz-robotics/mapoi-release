@@ -1,0 +1,12 @@
+Source: ros-humble-mapoi-rviz-plugins
+Section: misc
+Priority: optional
+Maintainer: "Shunsuke Kimura" <kimura.shunsuke@shimz.co.jp>
+Build-Depends: debhelper (>= 9.0.0), ros-humble-ament-cmake, ros-humble-ament-cmake-auto, ros-humble-ament-cmake-gtest <!nocheck>, ros-humble-geometry-msgs, ros-humble-mapoi-interfaces, ros-humble-rviz-common, ros-humble-rviz-default-plugins, ros-humble-std-srvs, ros-humble-tf2, ros-humble-ros-workspace
+Homepage: https://index.ros.org/p/mapoi_rviz_plugins/#humble
+Standards-Version: 3.9.2
+
+Package: ros-humble-mapoi-rviz-plugins
+Architecture: any
+Depends: ${shlibs:Depends}, ${misc:Depends}, ros-humble-ament-cmake-auto, ros-humble-geometry-msgs, ros-humble-mapoi-interfaces, ros-humble-rviz-common, ros-humble-rviz-default-plugins, ros-humble-std-srvs, ros-humble-tf2, ros-humble-ros-workspace
+Description: Rviz2 plugins for mapoi
