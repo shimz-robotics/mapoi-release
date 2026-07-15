@@ -1,0 +1,12 @@
+Source: ros-jazzy-mapoi-turtlebot3-example
+Section: misc
+Priority: optional
+Maintainer: "Shunsuke Kimura" <kimura.shunsuke@shimz.co.jp>
+Build-Depends: debhelper (>= 9.0.0), python3-yaml <!nocheck>, ros-jazzy-ament-cmake, ros-jazzy-ament-cmake-auto, ros-jazzy-ament-cmake-pytest <!nocheck>, ros-jazzy-ament-index-cpp, ros-jazzy-ament-lint-auto <!nocheck>, ros-jazzy-ament-lint-common <!nocheck>, ros-jazzy-geometry-msgs, ros-jazzy-mapoi-interfaces, ros-jazzy-nav2-msgs, ros-jazzy-rclcpp, ros-jazzy-rclcpp-action, ros-jazzy-std-msgs, ros-jazzy-std-srvs, ros-jazzy-tf2, ros-jazzy-tf2-geometry-msgs, ros-jazzy-yaml-cpp-vendor, ros-jazzy-ros-workspace
+Homepage: https://index.ros.org/p/mapoi_turtlebot3_example/#jazzy
+Standards-Version: 3.9.2
+
+Package: ros-jazzy-mapoi-turtlebot3-example
+Architecture: any
+Depends: ${shlibs:Depends}, ${misc:Depends}, ros-jazzy-ament-cmake-auto, ros-jazzy-ament-index-cpp, ros-jazzy-geometry-msgs, ros-jazzy-mapoi-interfaces, ros-jazzy-mapoi-rviz-plugins, ros-jazzy-mapoi-server, ros-jazzy-mapoi-webui, ros-jazzy-nav2-msgs, ros-jazzy-rclcpp, ros-jazzy-rclcpp-action, ros-jazzy-ros-gz-sim, ros-jazzy-std-msgs, ros-jazzy-std-srvs, ros-jazzy-tf2, ros-jazzy-tf2-geometry-msgs, ros-jazzy-turtlebot3, ros-jazzy-turtlebot3-gazebo, ros-jazzy-turtlebot3-navigation2, ros-jazzy-yaml-cpp-vendor, ros-jazzy-ros-workspace
+Description: TurtleBot3 simulation example for mapoi with sample maps and client nodes
