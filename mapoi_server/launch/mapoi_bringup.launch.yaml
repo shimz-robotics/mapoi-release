@@ -1,0 +1,198 @@
+# mapoi bringup: core 4 nodes + (任意で) シミュレータ連動 bridge を 1 本で起動。
+# core 4 = mapoi_server / mapoi_nav2_bridge (Nav2 bridge) / mapoi_amcl_localization_bridge
+# (AMCL adapter, #209) / mapoi_rviz2_publisher。後者 3 つは個別 arg で切替可能。
+#
+# 自分のロボットに mapoi を組み込む場合はこの launch を include する想定:
+#
+#   - include:
+#       file: "$(find-pkg-share mapoi_server)/launch/mapoi_bringup.launch.yaml"
+#       arg:
+#         - {name: maps_path,  value: "/path/to/maps"}
+#         - {name: map_name,   value: "initial_map_name"}
+#         - {name: simulator,  value: "gazebo"}              # gazebo|gz|none
+#         - {name: robot_entity_name, value: "burger"}       # simulator=gazebo|gz のみ
+#         - {name: robot_sdf_path,    value: "/path/.../model.sdf"}
+#
+# 設計メモ: シミュレータ bridge は別 launch ファイルにせず本 launch 内に直接 node 定義した。
+# 理由: bridge は mapoi_server の publish に依存するため単体起動の意味がなく、
+# 別 launch にしても include 1 行で済むだけで再利用性が無いため。
+
+launch:
+
+- arg:
+    name: maps_path
+    description: "Full path to maps directory (REQUIRED)"
+
+- arg:
+    name: map_name
+    description: "Initial map name, which is a directory name inside maps_path (REQUIRED)"
+
+- arg:
+    name: config_file
+    default: "mapoi_config.yaml"
+    description: "Config file name inside each map directory"
+
+- arg:
+    name: state_path
+    default: ""
+    description: >
+      mapoi_server の state_path parameter forward (#297)。
+      last-selected map を永続化する書き込み可能ディレクトリ。空 (default) = 永続化無効。
+      設定すると crash/再起動時に最後に選択した map の context を復元し、起動時の
+      initial pose publish を clear に切り替える (稼働中ロボットの自己位置が起動 map の
+      先頭 POI へテレポートするのを防ぐ)。maps_path を複数ロボットで共有する構成でも
+      state_path はロボットごとのローカルディレクトリを指定すること (例: /var/lib/mapoi)。
+
+- arg:
+    name: simulator
+    default: "none"
+    description: >
+      シミュレータ選択:
+        gazebo = Gazebo Classic (Humble 想定、mapoi_gazebo_bridge を起動)
+        gz     = gz-sim (Jazzy 想定、mapoi_gz_bridge + parameter_bridge を起動)
+        none   = シミュレータ連動なし (実機)
+
+- arg:
+    name: robot_entity_name
+    default: ""
+    description: "シミュレータ内のロボット entity 名 (simulator=gazebo|gz のときのみ使用)"
+
+- arg:
+    name: robot_sdf_path
+    default: ""
+    description: >
+      ロボット再生成用 SDF ファイルのフルパス (simulator=gazebo のときのみ使用)。
+      空文字なら respawn はスキップ (warn のみ)。
+      simulator=gz では SetEntityPose で teleport するため SDF 不要。
+
+- arg:
+    name: init_world_name
+    default: "default"
+    description: >
+      gz-sim で起動済みの world 名 (起動時固定、bridge ライフタイム中は不変)。
+      mapoi_gz_bridge は /world/<init_world_name>/{create,remove,set_pose} サービスを
+      呼ぶため、gz_sim 起動時の world 名 (SDF の <world name="..."> 値) と一致する必要がある。
+      simulator=gz のときのみ使用。
+
+- arg:
+    name: with_nav2_bridge
+    default: "true"
+    description: >
+      mapoi_nav2_bridge を起動するか。Nav2 連携が不要な構成 (POI/Route 編集のみの editor 用途等) で false。
+
+- arg:
+    name: auto_resume_timeout_sec
+    default: "0.0"
+    description: >
+      mapoi_nav2_bridge の auto_resume_timeout_sec parameter forward (#231)。
+      0.0 = disabled (現行仕様、外部 /mapoi/nav/resume を無限待ち)。
+      正値で「EVENT_PAUSED 発火から N 秒後に内部で resume を呼ぶ」demo / 自動運転シナリオ向け
+      opt-in 動作を有効化。負値は bridge 側で 0.0 に clamp。
+
+- arg:
+    name: cmd_vel_msg_type
+    default: "auto"
+    description: >
+      mapoi_nav2_bridge の cmd_vel_msg_type parameter forward (#249 / #251)。
+      twist = geometry_msgs/Twist (humble Nav2 互換)、
+      twist_stamped = geometry_msgs/TwistStamped (jazzy 以降 Nav2)、
+      auto (default) = ROS_DISTRO で自動選択 (humble → twist、それ以外 / 未設定 → twist_stamped)。
+      auto を override する必要があるのは下記の混在構成:
+        - jazzy 上で自前 controller が Twist のまま publish (= twist 明示)
+        - humble 上で自前 controller が TwistStamped 先取り (= twist_stamped 明示)
+        - ROS_DISTRO 未設定環境で humble を使う (= default fallback が twist_stamped のため twist 明示)
+
+- arg:
+    name: cmd_vel_topic
+    default: "cmd_vel"
+    description: >
+      mapoi_nav2_bridge の cmd_vel_topic parameter forward (#249)。
+      EVENT_PAUSED 判定用に subscribe する cmd_vel 互換 topic 名。
+      Nav2 と同じ topic を見る前提 (停止判定 source として一致が必要)。
+      default は標準的な Nav2 命名 'cmd_vel'。namespace 化 / multi-robot 構成で
+      上書き必要時に override する。
+
+- arg:
+    name: waypoint_arrival_mode
+    default: "nav2"
+    description: >
+      mapoi_nav2_bridge の waypoint_arrival_mode parameter forward (#243)。
+      nav2 (default) = Nav2 FollowWaypoints が waypoint 進行を主導 (mapoi は radius observer)。
+      mapoi = mapoi が「tolerance.xy 進入 ∨ Nav2 SUCCEEDED」(OR) で 1 waypoint ずつ
+      NavigateToPose を送って進める。mapoi モードでは tolerance.xy < xy_goal_tolerance が可能で
+      POI を小さくできる。ただし実効到達半径を真に小さくするには Nav2 controller の
+      xy_goal_tolerance (param/<distro>/burger.yaml の goal_checker) も併せて下げる必要がある。
+
+- arg:
+    name: with_amcl_localization_bridge
+    default: "true"
+    description: >
+      mapoi_amcl_localization_bridge を起動するか (#209)。AMCL 互換 localization (PoseWithCovarianceStamped を
+      `/initialpose` で受ける構成) を使う場合は true。slam_toolbox / 自前 localization で別契約 bridge を
+      使う場合や localization 自体を使わない構成 (editor 用途等) では false。
+
+- arg:
+    name: with_rviz_publisher
+    default: "true"
+    description: >
+      mapoi_rviz2_publisher を起動するか。RViz を使わない構成 (WebUI のみ、headless 編集等) で false。
+
+# core 3 nodes (常時起動)
+- node:
+    pkg: mapoi_server
+    exec: mapoi_server
+    param:
+      - {name: maps_path, value: "$(var maps_path)"}
+      - {name: map_name, value: "$(var map_name)"}
+      - {name: config_file, value: "$(var config_file)"}
+      - {name: state_path, value: "$(var state_path)"}
+
+- node:
+    pkg: mapoi_server
+    exec: mapoi_nav2_bridge
+    param:
+      - {name: auto_resume_timeout_sec, value: $(var auto_resume_timeout_sec)}
+      - {name: cmd_vel_msg_type, value: "$(var cmd_vel_msg_type)"}
+      - {name: cmd_vel_topic, value: "$(var cmd_vel_topic)"}
+      - {name: waypoint_arrival_mode, value: "$(var waypoint_arrival_mode)"}
+    if: $(var with_nav2_bridge)
+
+- node:
+    pkg: mapoi_server
+    exec: mapoi_amcl_localization_bridge
+    if: $(var with_amcl_localization_bridge)
+
+- node:
+    pkg: mapoi_server
+    exec: mapoi_rviz2_publisher
+    if: $(var with_rviz_publisher)
+
+# Gazebo Classic 連動 (Humble): operator map switch 時に world_model entity を入れ替え +
+# ロボットを initial_pose POI 座標に再生成 (Gazebo 本体は無停止)。
+- node:
+    pkg: mapoi_server
+    exec: mapoi_gazebo_bridge
+    output: "screen"
+    param:
+      - {name: robot_entity_name, value: "$(var robot_entity_name)"}
+      - {name: robot_sdf_path, value: "$(var robot_sdf_path)"}
+    if: $(eval "'$(var simulator)' == 'gazebo'")
+
+# gz-sim 連動 (Jazzy): operator map switch 時に world_model entity を入れ替え +
+# ロボットを SetEntityPose で initial_pose POI 座標に teleport (gz-sim 本体は無停止)。
+# parameter_bridge で gz native service (gz transport) を ROS 2 service として bridge する。
+- node:
+    pkg: mapoi_server
+    exec: mapoi_gz_bridge
+    output: "screen"
+    param:
+      - {name: robot_entity_name, value: "$(var robot_entity_name)"}
+      - {name: init_world_name, value: "$(var init_world_name)"}
+    if: $(eval "'$(var simulator)' == 'gz'")
+
+- node:
+    pkg: ros_gz_bridge
+    exec: parameter_bridge
+    output: "screen"
+    args: "/world/$(var init_world_name)/create@ros_gz_interfaces/srv/SpawnEntity /world/$(var init_world_name)/remove@ros_gz_interfaces/srv/DeleteEntity /world/$(var init_world_name)/set_pose@ros_gz_interfaces/srv/SetEntityPose"
+    if: $(eval "'$(var simulator)' == 'gz'")

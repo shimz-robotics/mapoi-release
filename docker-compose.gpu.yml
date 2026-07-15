@@ -1,0 +1,35 @@
+# NVIDIA GPU 対応 override
+#
+# ホスト要件:
+#   - NVIDIA ドライバがインストールされている Linux ホスト
+#   - nvidia-container-toolkit が設定済み (https://docs.nvidia.com/datacenter/cloud-native/container-toolkit/latest/install-guide.html)
+#
+# 利用方法:
+#   xhost +local:docker
+#   docker compose -f docker-compose.yml -f docker-compose.gpu.yml up demo
+#
+# GPU なしで使う場合は docker-compose.yml 単体で起動してください (CPU 経路、デフォルト挙動)
+services:
+  dev:
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: all
+              capabilities: [gpu]
+    environment:
+      - NVIDIA_VISIBLE_DEVICES=all
+      - NVIDIA_DRIVER_CAPABILITIES=all
+
+  demo:
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: all
+              capabilities: [gpu]
+    environment:
+      - NVIDIA_VISIBLE_DEVICES=all
+      - NVIDIA_DRIVER_CAPABILITIES=all

@@ -1,0 +1,41 @@
+# Intel / AMD 内蔵 GPU (DRI) 対応 override
+#
+# 用途:
+#   Docker (Jazzy / gz-sim) で RViz2 と Gazebo GUI の **片方だけ** GUI を出す組合せ
+#   (例: gazebo_gui:=false で RViz だけ) のとき、container 内から host GPU の DRM device
+#   (/dev/dri) にアクセスできず RViz (OGRE classic) が GL 初期化失敗で crash する問題 (#229)
+#   を、container に /dev/dri を共有して hardware GL を使わせることで解消する。
+#   NVIDIA discrete GPU 機は docker-compose.gpu.yml を使ってください (こちらは Intel/AMD iGPU 用)。
+#
+# ホスト要件:
+#   - Intel / AMD の内蔵 GPU + Mesa driver を持つ Linux ホスト
+#   - host 側で /dev/dri/{card*, renderD*} が存在すること (`ls -l /dev/dri` で確認)
+#
+# 利用方法:
+#   xhost +local:docker
+#   docker compose -f docker-compose.yml -f docker-compose.dri.yml up demo
+#
+# 注意 (GID 不一致):
+#   hardware GL は render node (/dev/dri/renderD128, host の `render` group 所有) 経由で動く。
+#   container 側 `render` / `video` group の GID が host と一致しないと、device は見えても
+#   permission denied で hardware 経路に乗れず software (llvmpipe) に落ちることがある。
+#   その場合は `ls -l /dev/dri/renderD128` の host GID を控え、override に numeric GID を
+#   `group_add: ["<host renderD128 GID>"]` の形で足してください。
+#   それでも不調なら GPU 共有を諦め、software 経路 (docs/docker.md「混在組合せの GL」節:
+#   gazebo_gui:=false + LIBGL_ALWAYS_SOFTWARE=1) を使ってください。
+#
+# GPU 共有なしの通常起動は docker-compose.yml 単体で OK (default は CPU/llvmpipe 経路)。
+services:
+  dev:
+    devices:
+      - /dev/dri:/dev/dri
+    group_add:
+      - video
+      - render
+
+  demo:
+    devices:
+      - /dev/dri:/dev/dri
+    group_add:
+      - video
+      - render

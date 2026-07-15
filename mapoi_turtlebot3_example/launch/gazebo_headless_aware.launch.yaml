@@ -1,0 +1,43 @@
+# Headless-aware wrapper of turtlebot3_gazebo/launch/turtlebot3_world.launch.py (Humble / Gazebo Classic 版).
+# 上流の turtlebot3_world.launch.py は gzserver と gzclient を無条件 include するため、
+# gazebo_gui arg で gzclient を条件化したラッパーを用意する。
+#
+# Jazzy (gz-sim) 用は gz_sim_headless_aware.launch.yaml を参照。
+# turtlebot3_navigation.launch.yaml は ROS_DISTRO で分岐して使い分ける。
+
+launch:
+
+- arg: {name: use_sim_time, default: "true"}
+- arg: {name: x_pose, default: "-2.0"}
+- arg: {name: y_pose, default: "-0.5"}
+- arg:
+    name: world
+    default: "$(find-pkg-share turtlebot3_gazebo)/worlds/turtlebot3_world.world"
+- arg:
+    name: gazebo_gui
+    default: "true"
+    description: "Launch gzclient (Gazebo GUI). Set false for headless."
+
+# gzserver (常時)
+- include:
+    file: "$(find-pkg-share gazebo_ros)/launch/gzserver.launch.py"
+    arg:
+      - {name: world, value: "$(var world)"}
+
+# gzclient (conditional)
+- include:
+    file: "$(find-pkg-share gazebo_ros)/launch/gzclient.launch.py"
+    if: $(var gazebo_gui)
+
+# robot_state_publisher
+- include:
+    file: "$(find-pkg-share turtlebot3_gazebo)/launch/robot_state_publisher.launch.py"
+    arg:
+      - {name: use_sim_time, value: "$(var use_sim_time)"}
+
+# spawn_turtlebot3
+- include:
+    file: "$(find-pkg-share turtlebot3_gazebo)/launch/spawn_turtlebot3.launch.py"
+    arg:
+      - {name: x_pose, value: "$(var x_pose)"}
+      - {name: y_pose, value: "$(var y_pose)"}
