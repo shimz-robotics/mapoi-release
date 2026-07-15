@@ -1,142 +1,191 @@
-# mapoi
+# mapoi_interfaces
 
 > English version (primary): [README.md](./README.md)
 > 本ファイルは日本語スナップショットです。最新の内容は英語版を参照してください。
 
-[![CI](https://github.com/shimz-robotics/mapoi/actions/workflows/ros-test.yml/badge.svg)](https://github.com/shimz-robotics/mapoi/actions/workflows/ros-test.yml)
-[![GitHub release](https://img.shields.io/github/v/release/shimz-robotics/mapoi)](https://github.com/shimz-robotics/mapoi/releases)
-[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](./LICENSE)
-[![ROS 2](https://img.shields.io/badge/ROS%202-Humble%20%7C%20Jazzy-blue)](https://docs.ros.org/)
+mapoi パッケージ群で使用するメッセージとサービスの定義パッケージです。
 
-Navigation2 向けの地図（Map）と関心地点（POI: Point of Interest）を管理するメタパッケージです。
-地図の切り替え、POI の管理、RViz2 GUI からの自律走行操作、POI 半径イベントの検知を提供します。
+## メッセージ (msg)
 
-<p align="center">
-  <img src="docs/images/webui.png" alt="mapoi Web UI のデスクトップ表示: 地図・POI・ルートとナビゲーション操作パネル" width="600">
-  <img src="docs/images/webui-mobile.png" alt="mapoi Web UI のスマートフォン表示" width="240">
-</p>
+### Tolerance.msg
 
-*`turtlebot3_world` デモ実行中の Web UI（デスクトップ表示とスマートフォン表示）。*
+POI の到達判定 tolerance（Nav2 `SimpleGoalChecker` の `xy_goal_tolerance` / `yaw_goal_tolerance` と align）。
 
-## 主な機能
+| フィールド | 型 | 説明 |
+| --- | --- | --- |
+| `xy` | `float64` | Euclidean tolerance (m)。POI 進入判定半径としても使われる |
+| `yaw` | `float64` | Angular tolerance (rad)。`0` = 未指定として Nav2 default にフォールバック |
 
-- **地図管理**: 複数地図の切り替え、Nav2 との連携
-- **POI 管理**: YAML ベースの POI 定義、サービス経由での取得
-- **自律走行**: POI 名指定でのゴール走行、ルート走行、一時停止・再開
-- **POI 半径イベント**: POI の半径にロボットが侵入/退出した際のイベント発行
-- **タグシステム**: システムタグ（`waypoint`, `landmark`, `pause`）とユーザー定義タグによる POI 分類
-- **RViz2 GUI**: 地図切替・ゴール指定・ルート走行の操作パネル、POI エディタ、ポーズ指定ツール
-- **Web UI**: ブラウザからの地図表示・POI 編集・ナビゲーション操作・ロボット位置表示（スマートフォン対応）
-- **マーカー表示**: RViz2 上での POI 可視化、ハイライト表示、半径表示
+### PointOfInterest.msg
 
-## アーキテクチャ
+POI（Point of Interest）を表すメッセージです。
 
-```mermaid
-flowchart LR
-    UI["Web UI / RViz2 panels"]
-    BRIDGE["mapoi_nav2_bridge"]
-    SERVER["mapoi_server"]
-    NAV2["Nav2"]
-    CFG["mapoi_config.yaml (per map)"]
-    UI -- "mapoi/nav/* command topics (goal_pose_poi, route, pause, resume, cancel, switch_map)" --> BRIDGE
-    BRIDGE -- "navigate_to_pose / follow_waypoints actions" --> NAV2
-    BRIDGE -- "mapoi/nav/status, mapoi/events" --> UI
-    UI -- "mapoi/get_pois_info etc. (services)" --> SERVER
-    BRIDGE -- "mapoi/select_map, mapoi/get_route_pois (services)" --> SERVER
-    SERVER <--> CFG
+| フィールド | 型 | 説明 |
+| --- | --- | --- |
+| `name` | `string` | POI の名前。実質的な一意キー |
+| `pose` | `geometry_msgs/Pose` | POI の位置・姿勢 |
+| `tolerance` | `mapoi_interfaces/Tolerance` | xy / yaw tolerance（v0.3.0 で旧 `radius` から置換） |
+| `tags` | `string[]` | POI に紐づくタグ（例: system tag `waypoint` / `landmark` / `pause`、user 定義 tag なら `audio_info` 等） |
+| `description` | `string` | POI の説明 |
+
+### PoiEvent.msg
+
+route 走行中に route 登録 POI への侵入 / 退出、および `pause` タグ付き POI で navigation 停止が発生した時に publish されるイベントメッセージです (#220 で 4 種別 → 3 種別に簡素化)。
+
+| フィールド | 型 | 説明 |
+| --- | --- | --- |
+| `EVENT_ENTER` | `uint8` (定数=1) | route 走行中に route 登録 POI の `tolerance.xy` 半径へ侵入 (`nav_mode == ROUTE` かつ `current_route_poi_names_` 該当 POI のみ、route 走行外 (IDLE / GOAL mode) では publish しない) |
+| `EVENT_PAUSED` | `uint8` (定数=2) | `pause` タグ付き POI の `tolerance.xy` 内で navigation 停止 (cmd_vel dwell で検知)。pause 自動 trigger 後に Nav2 が停止状態に入った瞬間 |
+| `EVENT_EXIT` | `uint8` (定数=3) | route 登録 POI から `tolerance.xy * hysteresis_exit_multiplier` を超えて退出 |
+| `event_type` | `uint8` | イベント種別 (上記 3 種のいずれか) |
+| `poi` | `mapoi_interfaces/PointOfInterest` | 対象 POI の情報 |
+| `stamp` | `builtin_interfaces/Time` | イベント発生時刻 |
+
+ライフサイクル:
+```
+EVENT_ENTER -> [EVENT_PAUSED (only if pause-tagged + nav stops)] -> EVENT_EXIT
 ```
 
-上図は簡略版です (localization・RViz マーカー・status/event の詳細は省略)。ノード・topic・service の全体像は [docs/architecture.ja.md](./docs/architecture.ja.md) を参照してください。
+`EVENT_PAUSED` の前提:
+- 採用 controller が **navigation 停止中も cmd_vel = 0 を継続 publish する** こと (Nav2 default の挙動)。controller が静止時に cmd_vel publish を止める実装の場合、`EVENT_PAUSED` は発火しません。
+- pause 自動 trigger (と `EVENT_PAUSED` の publish) は `mapoi_nav2_bridge` 側で実施し、resume は client 側 `mapoi/nav/resume` request で発動するため、`RESUMED` 相当の event は本仕様に含めません (resume は status topic で観測可能)。
 
-## Docker quickstart
+### TagDefinition.msg
 
-最速で試したい場合は ghcr.io 配布 image を `docker run`:
+POI 分類タグ (system tag / user tag) の単一定義を表すメッセージです。`GetTagDefinitions.srv` のレスポンス成分としても使えるよう PR #193 で導入されました。
 
-```sh
-xhost +local:docker
-docker pull ghcr.io/shimz-robotics/mapoi:jazzy   # jazzy/latest は main 追従のローリングタグ。再訪時も pull で最新化
-docker run --rm -it --network host --ipc host \
-  -e DISPLAY=$DISPLAY \
-  -e QT_X11_NO_MITSHM=1 \
-  -v /tmp/.X11-unix:/tmp/.X11-unix \
-  ghcr.io/shimz-robotics/mapoi:jazzy
-```
+| フィールド | 型 | 説明 |
+| --- | --- | --- |
+| `name` | `string` | タグ名 (例: system tag `waypoint` / `landmark` / `pause`、user 定義 tag なら `audio_info` 等) |
+| `description` | `string` | タグ用途の human-readable 説明 |
+| `is_system` | `bool` | `true` = システムタグ、`false` = ユーザー定義タグ |
 
-ブラウザで http://localhost:8765 にアクセス。Nav2 lifecycle 立ち上げに 30〜60 秒かかるので少し待ってから。WebUI が「Navigation unavailable」のままになる場合は [docs/docker.ja.md](./docs/docker.ja.md) のトラブルシューティングを参照してください。
+### InitialPoseRequest.msg
 
-Humble 版 / GPU 加速 / ソースビルド / 開発用 bind mount / UID 調整等の詳細は [docs/docker.ja.md](./docs/docker.ja.md) を参照してください。
+operator の map switch / reload に伴う「初期姿勢候補 POI」通知メッセージ (#149 round 8 で文字列ペアから型化)。唯一の writer である `mapoi_server` が `mapoi/request_initial_pose` service 経由の依頼を受けて publish するほか (#211。例: `mapoi_nav2_bridge` が Nav2 `LoadMap` 成功後に依頼)、起動時の default POI 採用・reload 時の stale clear でも自発 publish し、localization bridge 群が subscribe します。詳細・stale 排除戦略は `msg/InitialPoseRequest.msg` の冒頭コメント参照。
 
-## 動作要件
+| フィールド | 型 | 説明 |
+| --- | --- | --- |
+| `map_name` | `string` | 通知対象の map 名 (世代識別用)。非空なら publish 時点の現在 map と一致 (#299)。map 不明の requester が service に空を渡した場合のみ空文字がありうる |
+| `poi_name` | `string` | 採用する POI 名 (空文字 = 「候補なし」、subscriber は無視) |
 
-- ROS 2 Humble (Ubuntu 22.04) または Jazzy (Ubuntu 24.04)
-- Nav2 ほか依存パッケージは `rosdep` で解決します（後述のビルド手順を参照）
+QoS は `transient_local` (depth=1) で後起動 subscriber も latched 値を受信できます。
 
-## ビルドとサンプルの実行
+### NavigationBackendStatus.msg
 
-```sh
-source /opt/ros/<distro>/setup.bash   # humble または jazzy
-# cd path/to/your_ws
-git clone https://github.com/shimz-robotics/mapoi.git src/mapoi
-rosdep update
-rosdep install --from-paths src --ignore-src -r -y
-colcon build --symlink-install
-source install/setup.bash
-export TURTLEBOT3_MODEL=burger
-ros2 launch mapoi_turtlebot3_example turtlebot3_navigation.launch.yaml
-```
+Navigation bridge (Nav2 bridge / 自前 bridge) が 1 Hz で `mapoi/nav/backend_status` に publish する readiness メッセージです。UI 側 (`mapoi_webui`, `mapoi_rviz_plugins`) は `backend_ready` を見て navigation 操作を gate します。
 
-ブラウザから Web UI にアクセス:
+| フィールド | 型 | 説明 |
+| --- | --- | --- |
+| `backend_type` | `string` | bridge 識別子 (例: `nav2`, `custom_lidar_planner`)。tooltip 表示用 |
+| `backend_ready` | `bool` | bridge が navigation コマンドを受け付け実行できる状態か |
+| `reason` | `string` | `backend_ready=false` 時の human-readable 理由 (任意、機微情報は含めない — 下記参照) |
 
-http://localhost:8765
+#### QoS contract (issue #208)
 
-スマートフォンからも同一ネットワーク内であればアクセスできます。その場合、localhostの部分を実行しているPCのIPアドレスに変更してください。
-地図表示・POI 編集・ナビゲーション操作・ロボット位置表示が可能です。
+publisher / subscriber 双方で以下を必ず指定:
 
-コマンドで目的地を指定したい場合には、別ターミナルから自律走行をテストできます。
+- `durability`: `TRANSIENT_LOCAL` (late-joiner UI が最新 status を受信できる)
+- `reliability`: `RELIABLE`
+- `liveliness` (publisher): `MANUAL_BY_TOPIC` (publish() ごとに liveliness assert)
+- `liveliness` (subscriber): `AUTOMATIC` (pub `MANUAL_BY_TOPIC` × sub `AUTOMATIC` のみ互換)
+- `liveliness_lease_duration`: 5 s (両側、`pub.lease <= sub.lease` を満たす)
 
-```sh
-ros2 topic pub -1 /mapoi/nav/goal_pose_poi std_msgs/msg/String "{data: goal}"
-```
+詳細・違反パターンは `msg/NavigationBackendStatus.msg` の冒頭コメント参照。
 
-## 自分のロボットへの導入
+#### Custom bridge 実装者向けガイダンス (issue #207)
 
-mapoi は Nav2 ベースのロボットであれば実機・シミュレーションを問わず利用できます。導入手順は [docs/integration.ja.md](./docs/integration.ja.md) を参照してください。
+`backend_ready` の算出は bridge ごとに「実際に expose する capability の AND」とすること。`mapoi_nav2_bridge` (Nav2 bridge) の `goal_ready && route_ready && switch_map_ready` は **3 capability 全部を expose する bridge にのみ正しい**。片機能 bridge (例: NavigateToPose のみ) でこれを真似ると、expose していない capability が常に false → `backend_ready` も常に false → UI が常に "Navigation unavailable" になる。
 
-## パッケージ構成
+具体例とフィールド populate 方針 (`reason` の慣習表記含む) は `msg/NavigationBackendStatus.msg` の冒頭コメントに記載。
 
-| パッケージ | 説明 |
-| --- | --- |
-| [mapoi_server](./mapoi_server/) | 地図・POI 情報の管理サーバー、ナビゲーションサーバー、RViz2 マーカー配信（メインパッケージ） |
-| [mapoi_interfaces](./mapoi_interfaces/) | メッセージ・サービスの定義 |
-| [mapoi_rviz_plugins](./mapoi_rviz_plugins/) | RViz2 プラグイン（地図切替・POI 選択・自律走行の GUI、POI エディタ） |
-| [mapoi_webui](./mapoi_webui/) | Web UI（ブラウザからの地図表示・POI 編集・ナビゲーション操作・ロボット位置表示） |
-| [mapoi_turtlebot3_example](./mapoi_turtlebot3_example/) | TurtleBot3 シミュレーション環境でのサンプル |
-| [mapoi](./mapoi/) | コアパッケージ一式を 1 つの単位でインストールするための metapackage 定義 (シミュレーション用の mapoi_turtlebot3_example は含まない。デモを試す場合は example を直接インストールするとコア一式も入る) |
+`reason` は operator UI に表示され bag や remote dashboard に記録され得るため、credentials / token / 絶対パス / 内部 hostname / IP / user identifier / stack trace 等の機微情報を含めないこと。capability 名と短い状態動詞 (例: `not ready: navigate_to_pose action`) に留める。
 
-## ドキュメント
+> **CI lint の責務範囲** (`scripts/check_docs_consistency.py`、PR #217 / Close #216): static check は `publish_backend_status` 系関数中の **明示的な string literal** のみを走査する。パラメータ連結 (`reason = "ip=" + this->get_parameter(...).as_string()`) など動的に組み立てられる文字列、および raw string literal (`R"(...)"`) は責務外。lint 通過 ≠ 完全な redaction 保証。bridge 実装者は dynamic 部分にも本節の禁止事項を適用すること。
 
-| 用途 | リンク |
-| --- | --- |
-| 自分のロボットへの導入手順 | [docs/integration.ja.md](./docs/integration.ja.md) |
-| Docker での demo / 開発環境 | [docs/docker.ja.md](./docs/docker.ja.md) |
-| アーキテクチャ概要 (ノード・topic・service・データフロー) | [docs/architecture.ja.md](./docs/architecture.ja.md) |
-| Navigation / Localization backend 仕様 (自前 bridge 実装者向け) | [docs/backend-status.ja.md](./docs/backend-status.ja.md) |
-| コントリビューションガイド (開発環境・PR フロー) | [CONTRIBUTING.md](./CONTRIBUTING.md) |
-| テスト追加ポリシー (致命核基準・launch_test/e2e 追加の判断) | [docs/testing-policy.md](./docs/testing-policy.md) |
-| 破壊的変更リリースの migration ガイド | [docs/migration/README.ja.md](./docs/migration/README.ja.md) |
-| 各リリースの破壊的変更詳細 | [`CHANGELOG.rst`](./CHANGELOG.rst) |
+### LocalizationBackendStatus.msg
 
-## バージョン方針 (SemVer)
+Localization bridge (`mapoi_amcl_localization_bridge` / 自前 bridge) が 1 Hz で `mapoi/localization/backend_status` に publish する readiness メッセージ (#209)。UI 側は `backend_ready` を見て Initial Pose 操作を gate します。Navigation backend (上記 `NavigationBackendStatus`) とは独立した軸で、それぞれ別 indicator として扱います。
 
-本プロジェクトは現在 **v0.x の開発フェーズ** にあります。
+| フィールド | 型 | 説明 |
+| --- | --- | --- |
+| `backend_type` | `string` | bridge 識別子 (例: `amcl`, `slam_toolbox`, `custom_lidar_amcl`)。tooltip 表示用 |
+| `backend_ready` | `bool` | bridge が新しい initial pose を受け付け転送できる状態か |
+| `reason` | `string` | `backend_ready=false` 時の human-readable 理由 (任意、機微情報禁止 — `NavigationBackendStatus` の節と同方針) |
 
-- **v0.x 系**: API は安定していません。設計の見直しによる **破壊的変更が任意のリリースで発生する可能性** があります。各リリースの破壊的変更は [`CHANGELOG.rst`](./CHANGELOG.rst) と [GitHub Releases](https://github.com/shimz-robotics/mapoi/releases) で明示し、段階的な移行手順は [docs/migration/README.ja.md](./docs/migration/README.ja.md) にまとめます
-- **v1.0.0 以降**: 公開 API (msg / topic / service / launch param / YAML schema 等) の後方互換性を保証します。破壊的変更は major バージョン bump (v2.0.0 等) で明示します
+QoS contract (TRANSIENT_LOCAL / RELIABLE / MANUAL_BY_TOPIC publisher / AUTOMATIC subscriber / 5s lease) は `NavigationBackendStatus` と同一です。詳細は `msg/LocalizationBackendStatus.msg` の冒頭コメント参照。
 
-### 計画中の破壊的変更
+## サービス (srv)
 
-計画中の破壊的変更を含む今後の予定は [GitHub Milestones](https://github.com/shimz-robotics/mapoi/milestones) を参照してください。
+### SelectMap.srv
 
-## ライセンス
+現在の地図 context を切り替える Nav2-free サービスです。Operator mode の地図切替は `/mapoi/nav/switch_map` topic で指示し、`mapoi_nav2_bridge` がこの service を呼んだ後に Nav2 `LoadMap` を実行します。
 
-MIT
+| 方向 | フィールド | 型 | 説明 |
+| --- | --- | --- | --- |
+| Request | `map_name` | `string` | 選択する地図名 |
+| Request | `initial_poi_name` | `string` | 初期姿勢に使う POI 名。空なら先頭の有効 POI |
+| Response | `success` | `bool` | context 選択成功の有無 |
+| Response | `error_message` | `string` | 失敗時の理由 |
+| Response | `config_path` | `string` | 選択後の設定ファイル path |
+| Response | `resolved_initial_poi_name` | `string` | 解決済み初期姿勢 POI 名 |
+| Response | `nav2_node_names` | `string[]` | Nav2 map server node 名 |
+| Response | `nav2_map_urls` | `string[]` | 対応する map YAML path |
+
+### RequestInitialPose.srv
+
+`mapoi/initialpose_poi` (唯一の writer = `mapoi_server`) への publish を依頼するサービスです (#211)。従来は `mapoi_server` / `mapoi_nav2_bridge` / WebUI / RViz panel の 4 つが直接 publish していましたが、`transient_local` の latched cache は writer ごとに保持されるためクロス writer の stale 競合がありました。全 publish を本 service 経由で `mapoi_server` 1 つに集約することで latched cache を単一化し、clear が真の last-write-wins で効くようにします。
+
+| 方向 | フィールド | 型 | 説明 |
+| --- | --- | --- | --- |
+| Request | `map_name` | `string` | 対象の地図名 (`InitialPoseRequest.msg` の `map_name` をミラー)。非空なら `mapoi_server` の現在 map と一致必須で、不一致は publish されず `success=false` (#299)。空 = map 不明の requester として検証なしで透過 |
+| Request | `poi_name` | `string` | 採用する POI 名。空文字は clear (skip sample を publish、subscriber は無視) |
+| Response | `success` | `bool` | publish に成功したら true (`map_name` 不一致 reject 時は false、#299) |
+| Response | `error_message` | `string` | 失敗時の理由 (非空) |
+
+### GetMapsInfo.srv
+
+利用可能な地図の一覧と現在の地図名を取得するサービスです。
+
+| 方向 | フィールド | 型 | 説明 |
+| --- | --- | --- | --- |
+| Response | `maps_list` | `string[]` | 利用可能な地図名のリスト |
+| Response | `map_name` | `string` | 現在の地図名 |
+
+### GetPoisInfo.srv
+
+現在の地図に登録されている全 POI を取得するサービスです。
+
+| 方向 | フィールド | 型 | 説明 |
+| --- | --- | --- | --- |
+| Response | `pois_list` | `PointOfInterest[]` | POI のリスト |
+
+### GetRoutePois.srv
+
+指定されたルートに含まれる POI を、走行対象の waypoint と参照専用の landmark に分けて取得するサービスです (#143)。
+
+| 方向 | フィールド | 型 | 説明 |
+| --- | --- | --- | --- |
+| Request | `route_name` | `string` | ルート名 |
+| Response | `success` | `bool` | route が見つかった場合 `true`（POI 0 件でも route が存在すれば `true`）(#342) |
+| Response | `error_message` | `string` | `success=false` 時のみ非空。route 不存在の説明 (#342) |
+| Response | `pois_list` | `PointOfInterest[]` | ルート上の waypoint POI（順序付き。Nav2 へは `FollowWaypoints`、または `waypoint_arrival_mode=mapoi` 時は waypoint 毎の `NavigateToPose` で送られる） |
+| Response | `landmark_pois` | `PointOfInterest[]` | ルートに紐づく landmark POI。Nav2 の走行対象外だが、route 走行中は radius 監視される。順序は参考情報 |
+
+### GetRoutesInfo.srv
+
+利用可能なルートの一覧を取得するサービスです。
+
+| 方向 | フィールド | 型 | 説明 |
+| --- | --- | --- | --- |
+| Response | `routes_list` | `string[]` | ルート名のリスト |
+
+### GetTagDefinitions.srv
+
+タグ定義（システムタグ・ユーザータグ）を取得するサービスです。
+
+| 方向 | フィールド | 型 | 説明 |
+| --- | --- | --- | --- |
+| Response | `tag_names` | `string[]` | タグ名のリスト |
+| Response | `tag_descriptions` | `string[]` | タグ説明のリスト |
+| Response | `is_system` | `bool[]` | システムタグかどうか（`true` = システムタグ） |
